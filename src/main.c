@@ -2,99 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
-
-#define EXIT_SUCCESS 0
-#define EXIT_FAILURE 1
-
-typedef enum {
-    TOKEN_RETURN,
-    TOKEN_INT_LIT,
-    TOKEN_SEMI
-} TokenType;
-
-typedef struct {
-    TokenType type;
-    char *value;
-} Token;
-
-Token *tokenise(const char *str, int *out_count) {
-    Token *tokens = NULL;
-    int count = 0;
-
-    for (int i = 0; i < strlen(str); i++) {
-        char c = str[i];
-        if (isalpha(c)) {
-            int start = i;
-            int len = 0;
-
-            while (isalnum(str[i + len]))
-                len++;
-            
-            char *buf = malloc(len + 1);
-            memcpy(buf, &str[start], len);
-            buf[len] = '\0';
-            i += len - 1; // -1 because for loop will increment i
-
-            // allocate new token
-            tokens = realloc(tokens, sizeof(Token) * (count + 1));
-            
-            if (strcmp(buf, "return") == 0) {
-                tokens[count].type = TOKEN_RETURN;
-                tokens[count].value = NULL;
-            }
-            else {
-                fprintf(stderr, "\"%s\" is not a valid token\n", buf);
-                exit(EXIT_FAILURE);
-            }
-
-            count++;
-        }
-        else if (isdigit(c))
-        {
-            int start = i;
-            int len = 0;
-
-            while (isdigit(str[i + len]))
-                len++;
-
-            char *buf = malloc(len + 1);
-            memcpy(buf, &str[start], len);
-            buf[len] = '\0';
-            i += len - 1;
-
-            // allocate new token
-            tokens = realloc(tokens, sizeof(Token) * (count + 1));
-            tokens[count].type = TOKEN_INT_LIT;
-            tokens[count].value = buf;
-
-            count++;
-        }
-        else if (c == ';')
-        {
-            // allocate new token
-            tokens = realloc(tokens, sizeof(Token) * (count + 1));
-            tokens[count].type = TOKEN_SEMI;
-            tokens[count].value = NULL;
-
-            count++;
-        }
-        else if (isspace(c))
-        {
-            continue;
-        }
-        else {
-            fprintf(stderr, "\"%c\" is not valid here\n", c);
-            exit(EXIT_FAILURE);
-        }
-    }
-    // null terminate the token list
-    tokens = realloc(tokens, sizeof(Token) * (count + 1));
-    tokens[count].value = NULL;
-    tokens[count].type = 0;
-
-    *out_count = count;
-    return tokens;
-}
+    
+#include "lexer.c"
 
 char *tokens_to_asm(const Token *tokens, int token_count) {
     char *output;
@@ -103,7 +12,7 @@ char *tokens_to_asm(const Token *tokens, int token_count) {
         const Token token = tokens[i];
 
         // this is fucked
-        if (token.type == TOKEN_RETURN) {
+        if (token.type == TOKEN_EXIT) {
             if (i + 1 < token_count && tokens[i + 1].type == TOKEN_INT_LIT) {
                 if (i + 2 < token_count && tokens[i + 2].type == TOKEN_SEMI) {
                     // append assembly code to output
@@ -152,7 +61,7 @@ int main(int argc, char *argv[]) {
     Token *tokens = tokenise(buffer, &token_count);
     for (int i = 0; i < token_count; i++) {
         printf("Token: %s\n", 
-            tokens[i].type == TOKEN_RETURN ? "RETURN" :
+            tokens[i].type == TOKEN_EXIT ? "EXIT" :
             tokens[i].type == TOKEN_INT_LIT ? "INT_LIT" :
             tokens[i].type == TOKEN_SEMI ? "SEMI" : "UNKNOWN");
     }
