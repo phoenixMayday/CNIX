@@ -6,7 +6,9 @@
 typedef enum {
     TOKEN_EXIT,
     TOKEN_INT_LIT,
-    TOKEN_SEMI
+    TOKEN_SEMI,
+    TOKEN_PLUS,
+    TOKEN_MINUS
 } TokenType;
 
 typedef struct {
@@ -71,6 +73,24 @@ Token *tokenise(const char *str, int *out_count) {
             // allocate new token
             tokens = realloc(tokens, sizeof(Token) * (count + 1));
             tokens[count].type = TOKEN_SEMI;
+            tokens[count].value = NULL;
+
+            count++;
+        }
+        else if (c == '+')
+        {
+            // allocate new token
+            tokens = realloc(tokens, sizeof(Token) * (count + 1));
+            tokens[count].type = TOKEN_PLUS;
+            tokens[count].value = NULL;
+
+            count++;
+        }
+        else if (c == '-')
+        {
+            // allocate new token
+            tokens = realloc(tokens, sizeof(Token) * (count + 1));
+            tokens[count].type = TOKEN_MINUS;
             tokens[count].value = NULL;
 
             count++;

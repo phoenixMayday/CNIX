@@ -3,34 +3,9 @@
 #include <string.h>
 #include <ctype.h>
     
-#include "lexer.c"
-
-char *tokens_to_asm(const Token *tokens, int token_count) {
-    char *output;
-    asprintf(&output, ".global _start\n_start:\n");
-    for (int i = 0; i < token_count; i++) {
-        const Token token = tokens[i];
-
-        // this is fucked
-        if (token.type == TOKEN_EXIT) {
-            if (i + 1 < token_count && tokens[i + 1].type == TOKEN_INT_LIT) {
-                if (i + 2 < token_count && tokens[i + 2].type == TOKEN_SEMI) {
-                    // append assembly code to output
-                    char *tmp;
-                    asprintf(&tmp,
-                        "%s"
-                        "    mov $60, %%rax\n"
-                        "    mov $%s, %%rdi\n"
-                        "    syscall\n",
-                        output, tokens[i + 1].value);
-                    free(output); // free old string
-                    output = tmp;
-                }
-            }
-        }
-    }
-    return output;
-}
+// #include "lexer.c"
+// #include "parser.c"
+#include "generator.c"
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -63,11 +38,16 @@ int main(int argc, char *argv[]) {
         printf("Token: %s\n", 
             tokens[i].type == TOKEN_EXIT ? "EXIT" :
             tokens[i].type == TOKEN_INT_LIT ? "INT_LIT" :
-            tokens[i].type == TOKEN_SEMI ? "SEMI" : "UNKNOWN");
+            tokens[i].type == TOKEN_SEMI ? "SEMI" :
+            tokens[i].type == TOKEN_PLUS ? "PLUS" : 
+            tokens[i].type == TOKEN_MINUS ? "MINUS" :
+            "UNKNOWN"
+        );
     }
     free(buffer);
 
-    char *asm_code = tokens_to_asm(tokens, token_count);
+    NodeProg *prog = parse_prog(&tokens, token_count);
+    char *asm_code = gen_stmts(prog);
     printf("Assembly code:\n%s\n", asm_code);
     FILE *out_fptr = fopen("out.s", "w");
     fprintf(out_fptr, "%s", asm_code);
