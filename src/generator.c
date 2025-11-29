@@ -1,18 +1,25 @@
 #include "parser.c"
 
+static void append(char **buf, const char *text) {
+    size_t old_len = strlen(*buf);
+    size_t add_len = strlen(text);
+
+    *buf = realloc(*buf, old_len + add_len + 1); // +1 for \0
+    memcpy(*buf + old_len, text, add_len + 1);
+}
+
 void gen_expr(NodeExpr *expr, char **expr_output) {
     if (expr->kind == NODE_EXPR_TERM) {
         NodeTerm *term = expr->as.term;
         if (term->kind == NODE_TERM_INT_LIT) {
             char *tmp;
             asprintf(&tmp,
-                "%s"
                 "    mov $%s, %%rax\n"
                 "    push %%rax\n",
-                *expr_output,
                 term->as.int_lit->int_lit.value);
-            free(*expr_output);
-            *expr_output = tmp;
+            
+            append(expr_output, tmp);
+            free(tmp);
         } else {
             fprintf(stderr, "Unknown term kind in code generation\n");
             exit(EXIT_FAILURE);
@@ -20,31 +27,35 @@ void gen_expr(NodeExpr *expr, char **expr_output) {
     } else if (expr->kind == NODE_EXPR_ADD) {
         gen_expr(expr->as.add->rhs, expr_output);
         gen_expr(expr->as.add->lhs, expr_output);
-        char *tmp;
-        asprintf(&tmp,
-            "%s"
-            "    pop %%rax\n"
-            "    pop %%rbx\n"
-            "    add %%rbx, %%rax\n"
-            "    push %%rax\n",
-            *expr_output
-        );
-        free(*expr_output);
-        *expr_output = tmp;
+        append(expr_output,
+            "    pop %rax\n"
+            "    pop %rbx\n"
+            "    add %rbx, %rax\n"
+            "    push %rax\n");
     } else if (expr->kind == NODE_EXPR_SUB) {
         gen_expr(expr->as.sub->rhs, expr_output);
         gen_expr(expr->as.sub->lhs, expr_output);
-        char *tmp;
-        asprintf(&tmp,
-            "%s"
-            "    pop %%rax\n"
-            "    pop %%rbx\n"
-            "    sub %%rbx, %%rax\n"
-            "    push %%rax\n",
-            *expr_output
-        );
-        free(*expr_output);
-        *expr_output = tmp;
+        append(expr_output,
+            "    pop %rax\n"
+            "    pop %rbx\n"
+            "    sub %rbx, %rax\n"
+            "    push %rax\n");
+    } else if (expr->kind == NODE_EXPR_MUL) {
+        gen_expr(expr->as.sub->rhs, expr_output);
+        gen_expr(expr->as.sub->lhs, expr_output);
+        append(expr_output,
+            "    pop %rax\n"
+            "    pop %rbx\n"
+            "    mul %rbx\n"
+            "    push %rax\n");
+    } else if (expr->kind == NODE_EXPR_DIV) {
+        gen_expr(expr->as.sub->rhs, expr_output);
+        gen_expr(expr->as.sub->lhs, expr_output);
+        append(expr_output,
+            "    pop %rax\n"
+            "    pop %rbx\n"
+            "    div %rbx\n"
+            "    push %rax\n");
     } else {
         fprintf(stderr, "Unknown expression kind in code generation\n");
         exit(EXIT_FAILURE);
@@ -60,18 +71,15 @@ char *gen_stmts(NodeProg *prog) {
         {
             char *expr_output = strdup("");
             gen_expr(current_stmt->as.exit_stmt->expr, &expr_output);
-            char *tmp;
-            asprintf(&tmp,
-                "%s"
-                "%s"
-                "    mov $60, %%rax\n"
-                "    pop %%rdi\n"
-                "    syscall\n",
-                output, 
-                expr_output);
-            free(output);
-            output = tmp;
+
+            append(&output, expr_output);
             free(expr_output);
+
+            // syscall exit
+            append(&output,
+                   "    mov $60, %rax\n"
+                   "    pop %rdi\n"
+                   "    syscall\n");
         } else {
             fprintf(stderr, "Unknown statement kind in code generation\n");
             exit(EXIT_FAILURE);

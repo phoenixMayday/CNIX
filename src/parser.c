@@ -123,19 +123,27 @@ NodeExpr *parse_expr(Token **tokens, int *token_pos, int token_count) {
     if (op->type == TOKEN_PLUS) {
         NodeExprAdd *add_node = malloc(sizeof(NodeExprAdd));
         add_node->lhs = lhs_expr;
-        // eval right expression
         add_node->rhs = parse_expr(tokens, token_pos, token_count);
-        
         result_expr->kind = NODE_EXPR_ADD;
         result_expr->as.add = add_node;
     } else if (op->type == TOKEN_MINUS) {
         NodeExprSub *sub_node = malloc(sizeof(NodeExprSub));
         sub_node->lhs = lhs_expr;
-        // eval right expression
         sub_node->rhs = parse_expr(tokens, token_pos, token_count);
-        
         result_expr->kind = NODE_EXPR_SUB;
         result_expr->as.sub = sub_node;
+    } else if (op->type == TOKEN_MUL) {
+        NodeExprMul *mul_node = malloc(sizeof(NodeExprMul));
+        mul_node->lhs = lhs_expr;
+        mul_node->rhs = parse_expr(tokens, token_pos, token_count);
+        result_expr->kind = NODE_EXPR_MUL;
+        result_expr->as.mul = mul_node;
+    } else if (op->type == TOKEN_DIV) {
+        NodeExprDiv *div_node = malloc(sizeof(NodeExprDiv));
+        div_node->lhs = lhs_expr;
+        div_node->rhs = parse_expr(tokens, token_pos, token_count);
+        result_expr->kind = NODE_EXPR_DIV;
+        result_expr->as.div = div_node;
     } else {
         fprintf(stderr, "Unexpected operator in expression: %d\n", op->type);
         exit(EXIT_FAILURE);
