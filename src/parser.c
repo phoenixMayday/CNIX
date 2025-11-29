@@ -2,7 +2,8 @@
 
 // Terms
 typedef enum {
-    NODE_TERM_INT_LIT
+    NODE_TERM_INT_LIT,
+    NODE_TERM_IDENT
 } NodeTermKind;
 
 typedef struct {
@@ -10,9 +11,14 @@ typedef struct {
 } NodeTermIntLit;
 
 typedef struct {
+    Token ident;
+} NodeTermIdent;
+
+typedef struct {
     NodeTermKind kind;
     union {
         NodeTermIntLit *int_lit;
+        NodeTermIdent *ident;
     } as;
 } NodeTerm;
 
@@ -60,7 +66,8 @@ typedef struct NodeExpr{
 
 // Statements
 typedef enum {
-    NODE_STMT_EXIT
+    NODE_STMT_EXIT,
+    NODE_STMT_VAR
 } NodeStmtKind;
 
 typedef struct {
@@ -68,9 +75,15 @@ typedef struct {
 } NodeStmtExit;
 
 typedef struct {
+    Token ident;
+    NodeExpr *expr;
+} NodeStmtVar;
+
+typedef struct {
     NodeStmtKind kind;
     union {
         NodeStmtExit *exit_stmt;
+        NodeStmtVar *var_stmt;
     } as;
 } NodeStmt;
 
@@ -89,6 +102,16 @@ NodeTerm *parse_term(Token **tokens, int *token_pos, int token_count) {
         NodeTerm *term_node = malloc(sizeof(NodeTerm));
         term_node->kind = NODE_TERM_INT_LIT;
         term_node->as.int_lit = int_lit_node;
+
+        (*token_pos)++;
+        return term_node;
+    } else if (current->type == TOKEN_VAR) {
+        NodeTermIdent *ident_node = malloc(sizeof(NodeTermIdent));
+        ident_node->ident = *current;
+
+        NodeTerm *term_node = malloc(sizeof(NodeTerm));
+        term_node->kind = NODE_TERM_IDENT;
+        term_node->as.ident = ident_node;
 
         (*token_pos)++;
         return term_node;
@@ -173,6 +196,29 @@ NodeStmt *parse_stmt(Token **tokens, int *token_pos, int token_count) {
         NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
         stmt_node->kind = NODE_STMT_EXIT;
         stmt_node->as.exit_stmt = exit_node;
+
+        return stmt_node;
+    } else if (current->type == TOKEN_VAR) {
+        Token ident_token = *current;
+        (*token_pos)++;
+
+        // expect expression
+        NodeExpr *expr = parse_expr(tokens, token_pos, token_count);
+
+        // expect semicolon
+        if (*token_pos >= token_count || (*tokens)[*token_pos].type != TOKEN_SEMI) {
+            fprintf(stderr, "Expected ';' at end of statement\n");
+            exit(EXIT_FAILURE);
+        }
+        (*token_pos)++;
+
+        NodeStmtVar *var_node = malloc(sizeof(NodeStmtVar));
+        var_node->ident = ident_token;
+        var_node->expr = expr;
+
+        NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
+        stmt_node->kind = NODE_STMT_VAR;
+        stmt_node->as.var_stmt = var_node;
 
         return stmt_node;
     }

@@ -10,7 +10,8 @@ typedef enum {
     TOKEN_PLUS,
     TOKEN_MINUS,
     TOKEN_MUL,
-    TOKEN_DIV
+    TOKEN_DIV,
+    TOKEN_VAR
 } TokenType;
 
 typedef struct {
@@ -50,6 +51,8 @@ Token *tokenise(const char *str, int *out_count) {
            
             if (strcmp(buf, "exit") == 0) {
                 push_token(&tokens, &count, TOKEN_EXIT, NULL);
+            } else if (strcmp(buf, "var") == 0) {
+                push_token(&tokens, &count, TOKEN_VAR, NULL);
             }
             else {
                 fprintf(stderr, "\"%s\" is not a valid token\n", buf);
