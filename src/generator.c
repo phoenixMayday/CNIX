@@ -12,6 +12,15 @@ typedef struct {
     size_t stack_size;
 } CodegenCtx;
 
+int get_var_index(CodegenCtx *ctx, const char *name) {
+    for (int i = 0; i < ctx->var_count; i++) {
+        if (strcmp(ctx->vars[i].name, name) == 0) {
+            return i;
+        }
+    }
+    return -1; // not found
+}
+
 static void append(char **buf, const char *text) {
     size_t old_len = strlen(*buf);
     size_t add_len = strlen(text);
@@ -36,7 +45,23 @@ void gen_expr(NodeExpr *expr, CodegenCtx *ctx) {
             free(tmp);
         } 
         else if (term->kind == NODE_TERM_IDENT) {
-            // TODO
+            // find variable
+            int var_index = get_var_index(ctx, term->as.ident->ident.value);
+            if (var_index == -1) {
+                fprintf(stderr, "Undefined variable \"%s\"\n", term->as.ident->ident.value);
+                exit(EXIT_FAILURE);
+            }
+
+            // push copy of variable's value to top of stack
+            char *tmp;
+            asprintf(&tmp,
+                "    pushq %zu(%%rsp)\n",
+                (ctx->stack_size - ctx->vars[var_index].stack_loc) * 8);
+            
+            ctx->stack_size++;
+
+            append(&ctx->output, tmp);
+            free(tmp);
         }
         else {
             fprintf(stderr, "Unknown term kind in code generation\n");
@@ -99,23 +124,21 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
     } 
     else if (stmt->kind == NODE_STMT_VAR) {
         // check if var already exists
-        for (int i = 0; i < ctx->var_count; i++) {
-            if (strcmp(ctx->vars[i].name, stmt->as.stmt_var->ident.value) == 0) {
-                fprintf(stderr, "Variable \"%s\" already declared\n", stmt->as.stmt_var->ident.value);
-                exit(EXIT_FAILURE);
-            }
+        int var_index = get_var_index(ctx, stmt->as.stmt_var->ident.value);
+        if (var_index >= 0) {
+            fprintf(stderr, "Variable \"%s\" already defined\n", stmt->as.stmt_var->ident.value);
+            exit(EXIT_FAILURE);
         }
 
         // push expression result to top of stack
         gen_expr(stmt->as.stmt_var->expr, ctx);
 
+        // push new variable to array
         ctx->vars = realloc(ctx->vars, sizeof(Var) * (ctx->var_count + 1));
         Var *new_var = &ctx->vars[ctx->var_count];
         new_var->name = stmt->as.stmt_var->ident.value;
         new_var->stack_loc = ctx->stack_size;
         ctx->var_count++;
-
-        printf("Declared variable \"%s\" at stack location %zu\n", new_var->name, new_var->stack_loc);
     } else {
         fprintf(stderr, "Unknown statement kind in code generation\n");
         exit(EXIT_FAILURE);
@@ -130,8 +153,3 @@ char *gen_prog(NodeProg *prog) {
     }
     return ctx.output;
 }
-
-// vars
-// output
-// stack size
-// scopes?
