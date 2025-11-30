@@ -15,7 +15,7 @@ int main(int argc, char *argv[]) {
 
     FILE *fptr = fopen(argv[1], "r");
     if (!fptr) {
-        fprintf(stderr, "Error opening file");
+        fprintf(stderr, "Error opening file\n");
         return EXIT_FAILURE;
     }
 
@@ -41,13 +41,18 @@ int main(int argc, char *argv[]) {
             tokens[i].type == TOKEN_SEMI ? "SEMI" :
             tokens[i].type == TOKEN_PLUS ? "PLUS" : 
             tokens[i].type == TOKEN_MINUS ? "MINUS" :
+            tokens[i].type == TOKEN_MUL ? "MUL" :
+            tokens[i].type == TOKEN_DIV ? "DIV" :
+            tokens[i].type == TOKEN_VAR ? "VAR" :
+            tokens[i].type == TOKEN_EQUALS ? "EQUALS" :
+            tokens[i].type == TOKEN_IDENT ? "IDENT" :
             "UNKNOWN"
         );
     }
     free(buffer);
 
     NodeProg *prog = parse_prog(&tokens, token_count);
-    char *asm_code = gen_stmts(prog);
+    char *asm_code = gen_prog(prog);
     printf("Assembly code:\n%s\n", asm_code);
     FILE *out_fptr = fopen("out.s", "w");
     fprintf(out_fptr, "%s", asm_code);

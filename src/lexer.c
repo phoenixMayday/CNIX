@@ -11,7 +11,9 @@ typedef enum {
     TOKEN_MINUS,
     TOKEN_MUL,
     TOKEN_DIV,
-    TOKEN_VAR
+    TOKEN_VAR,
+    TOKEN_EQUALS,
+    TOKEN_IDENT
 } TokenType;
 
 typedef struct {
@@ -51,14 +53,13 @@ Token *tokenise(const char *str, int *out_count) {
            
             if (strcmp(buf, "exit") == 0) {
                 push_token(&tokens, &count, TOKEN_EXIT, NULL);
+                free(buf);
             } else if (strcmp(buf, "var") == 0) {
                 push_token(&tokens, &count, TOKEN_VAR, NULL);
+                free(buf);
+            } else {
+                push_token(&tokens, &count, TOKEN_IDENT, buf);
             }
-            else {
-                fprintf(stderr, "\"%s\" is not a valid token\n", buf);
-                exit(EXIT_FAILURE);
-            }
-            free(buf);
         }
         else if (isdigit(c)) {
             int start = i;
@@ -82,6 +83,8 @@ Token *tokenise(const char *str, int *out_count) {
             push_token(&tokens, &count, TOKEN_MUL, NULL);
         } else if (c == '/') {
             push_token(&tokens, &count, TOKEN_DIV, NULL);
+        } else if (c == '=') {
+            push_token(&tokens, &count, TOKEN_EQUALS, NULL);
         } 
         else if (isspace(c)) {
             continue;

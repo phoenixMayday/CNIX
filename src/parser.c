@@ -82,8 +82,8 @@ typedef struct {
 typedef struct {
     NodeStmtKind kind;
     union {
-        NodeStmtExit *exit_stmt;
-        NodeStmtVar *var_stmt;
+        NodeStmtExit *stmt_exit;
+        NodeStmtVar *stmt_var;
     } as;
 } NodeStmt;
 
@@ -105,10 +105,10 @@ NodeTerm *parse_term(Token **tokens, int *token_pos, int token_count) {
 
         (*token_pos)++;
         return term_node;
-    } else if (current->type == TOKEN_VAR) {
+    } else if (current->type == TOKEN_IDENT) {
         NodeTermIdent *ident_node = malloc(sizeof(NodeTermIdent));
         ident_node->ident = *current;
-
+        
         NodeTerm *term_node = malloc(sizeof(NodeTerm));
         term_node->kind = NODE_TERM_IDENT;
         term_node->as.ident = ident_node;
@@ -127,15 +127,19 @@ NodeExpr *parse_expr(Token **tokens, int *token_pos, int token_count) {
     NodeTerm *lhs_term = parse_term(tokens, token_pos, token_count);
     NodeExpr *lhs_expr = malloc(sizeof(NodeExpr));
     lhs_expr->kind = NODE_EXPR_TERM;
-    lhs_expr->as.term = lhs_term ;
+    lhs_expr->as.term = lhs_term;
     
-    if (*token_pos == token_count-1) {
-        // if at end, return term as expr
+    // end of token stream
+    if (*token_pos >= token_count) {
         return lhs_expr;
-    } else if (*token_pos == token_count-2) {
-        // if 1 token left, error (needs to have 2: operator and rhs)
-        fprintf(stderr, "Incomplete expression\n");
-        exit(EXIT_FAILURE);
+    }
+
+    Token *peek = &(*tokens)[*token_pos];
+    if (peek->type != TOKEN_PLUS &&
+        peek->type != TOKEN_MINUS &&
+        peek->type != TOKEN_MUL &&
+        peek->type != TOKEN_DIV) {
+        return lhs_expr;
     }
 
     // eval operator
@@ -190,16 +194,30 @@ NodeStmt *parse_stmt(Token **tokens, int *token_pos, int token_count) {
         }
         (*token_pos)++;
 
-        NodeStmtExit *exit_node = malloc(sizeof(NodeStmtExit));
-        exit_node->expr = expr;
+        NodeStmtExit *stmt_exit = malloc(sizeof(NodeStmtExit));
+        stmt_exit->expr = expr;
 
         NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
         stmt_node->kind = NODE_STMT_EXIT;
-        stmt_node->as.exit_stmt = exit_node;
+        stmt_node->as.stmt_exit = stmt_exit;
 
         return stmt_node;
     } else if (current->type == TOKEN_VAR) {
-        Token ident_token = *current;
+        (*token_pos)++;
+        Token ident_token = (*tokens)[*token_pos];
+
+        // expect identifier
+        if (*token_pos >= token_count || (*tokens)[*token_pos].type != TOKEN_IDENT) {
+            fprintf(stderr, "Expected identifier after 'var'\n");
+            exit(EXIT_FAILURE);
+        }
+        (*token_pos)++;
+
+        // expect equals
+        if (*token_pos >= token_count || (*tokens)[*token_pos].type != TOKEN_EQUALS) {
+            fprintf(stderr, "Expected '=' after variable name\n");
+            exit(EXIT_FAILURE);
+        }
         (*token_pos)++;
 
         // expect expression
@@ -212,13 +230,13 @@ NodeStmt *parse_stmt(Token **tokens, int *token_pos, int token_count) {
         }
         (*token_pos)++;
 
-        NodeStmtVar *var_node = malloc(sizeof(NodeStmtVar));
-        var_node->ident = ident_token;
-        var_node->expr = expr;
+        NodeStmtVar *stmt_var = malloc(sizeof(NodeStmtVar));
+        stmt_var->ident = ident_token;
+        stmt_var->expr = expr;
 
         NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
         stmt_node->kind = NODE_STMT_VAR;
-        stmt_node->as.var_stmt = var_node;
+        stmt_node->as.stmt_var = stmt_var;
 
         return stmt_node;
     }
@@ -239,8 +257,6 @@ NodeProg *parse_prog(Token **tokens, int token_count) {
         prog->stmts = realloc(prog->stmts, sizeof(NodeStmt*) * (prog->stmt_count + 1));
         prog->stmts[prog->stmt_count] = stmt;
         prog->stmt_count++;
-        printf("Parsed statement, total count: %d\n", prog->stmt_count);
-        printf("Current token position: %d / %d\n", token_pos, token_count);
     }
 
     return prog;
