@@ -128,61 +128,60 @@ NodeTerm *parse_term(ParserCtx *ctx) {
     }
 }
 
-NodeExpr *parse_expr(ParserCtx *ctx) {
+NodeExpr *parse_expr(ParserCtx *ctx, int min_prec) {
     // eval left term
     NodeTerm *lhs_term = parse_term(ctx);
     NodeExpr *lhs_expr = malloc(sizeof(NodeExpr));
     lhs_expr->kind = NODE_EXPR_TERM;
     lhs_expr->as.term = lhs_term;
     
-    // end of token stream
-    if (ctx->current_pos >= ctx->token_count) {
-        return lhs_expr;
+    while (ctx->current_pos < ctx->token_count) {
+        Token *peek = &ctx->tokens[ctx->current_pos];
+        int prec = get_precedence(peek->type);
+        if (prec == 0 || prec < min_prec) break;
+
+        // eval operator
+        Token op = *peek;
+        ctx->current_pos++;
+
+        // parse right-hand side expression with higher precedence for left associativity
+        NodeExpr *rhs_expr = parse_expr(ctx, prec + 1);
+
+        NodeExpr *combined = malloc(sizeof(NodeExpr));
+        if (op.type == TOKEN_PLUS) {
+            NodeExprAdd *add_node = malloc(sizeof(NodeExprAdd));
+            add_node->lhs = lhs_expr;
+            add_node->rhs = rhs_expr;
+            combined->kind = NODE_EXPR_ADD;
+            combined->as.add = add_node;
+        } else if (op.type == TOKEN_MINUS) {
+            NodeExprSub *sub_node = malloc(sizeof(NodeExprSub));
+            sub_node->lhs = lhs_expr;
+            sub_node->rhs = rhs_expr;
+            combined->kind = NODE_EXPR_SUB;
+            combined->as.sub = sub_node;
+        } else if (op.type == TOKEN_MUL) {
+            NodeExprMul *mul_node = malloc(sizeof(NodeExprMul));
+            mul_node->lhs = lhs_expr;
+            mul_node->rhs = rhs_expr;
+            combined->kind = NODE_EXPR_MUL;
+            combined->as.mul = mul_node;
+        } else if (op.type == TOKEN_DIV) {
+            NodeExprDiv *div_node = malloc(sizeof(NodeExprDiv));
+            div_node->lhs = lhs_expr;
+            div_node->rhs = rhs_expr;
+            combined->kind = NODE_EXPR_DIV;
+            combined->as.div = div_node;
+        } else {
+            fprintf(stderr, "Unexpected operator in expression: %d\n", op.type);
+            exit(EXIT_FAILURE);
+        }
+
+        // make combined expression the new lhs
+        lhs_expr = combined;
     }
 
-    Token *peek = &ctx->tokens[ctx->current_pos];
-    if (peek->type != TOKEN_PLUS &&
-        peek->type != TOKEN_MINUS &&
-        peek->type != TOKEN_MUL &&
-        peek->type != TOKEN_DIV) {
-        return lhs_expr;
-    }
-
-    // eval operator
-    Token *op = &ctx->tokens[ctx->current_pos];
-    ctx->current_pos++;
-
-    NodeExpr *result_expr = malloc(sizeof(NodeExpr));
-    if (op->type == TOKEN_PLUS) {
-        NodeExprAdd *add_node = malloc(sizeof(NodeExprAdd));
-        add_node->lhs = lhs_expr;
-        add_node->rhs = parse_expr(ctx);
-        result_expr->kind = NODE_EXPR_ADD;
-        result_expr->as.add = add_node;
-    } else if (op->type == TOKEN_MINUS) {
-        NodeExprSub *sub_node = malloc(sizeof(NodeExprSub));
-        sub_node->lhs = lhs_expr;
-        sub_node->rhs = parse_expr(ctx);
-        result_expr->kind = NODE_EXPR_SUB;
-        result_expr->as.sub = sub_node;
-    } else if (op->type == TOKEN_MUL) {
-        NodeExprMul *mul_node = malloc(sizeof(NodeExprMul));
-        mul_node->lhs = lhs_expr;
-        mul_node->rhs = parse_expr(ctx);
-        result_expr->kind = NODE_EXPR_MUL;
-        result_expr->as.mul = mul_node;
-    } else if (op->type == TOKEN_DIV) {
-        NodeExprDiv *div_node = malloc(sizeof(NodeExprDiv));
-        div_node->lhs = lhs_expr;
-        div_node->rhs = parse_expr(ctx);
-        result_expr->kind = NODE_EXPR_DIV;
-        result_expr->as.div = div_node;
-    } else {
-        fprintf(stderr, "Unexpected operator in expression: %d\n", op->type);
-        exit(EXIT_FAILURE);
-    }
-
-    return result_expr;
+    return lhs_expr;
 }
 
 NodeStmt *parse_stmt(ParserCtx *ctx) {
@@ -191,7 +190,7 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         ctx->current_pos++;
 
         // expect expression
-        NodeExpr *expr = parse_expr(ctx);
+        NodeExpr *expr = parse_expr(ctx, 0);
 
         // expect semicolon
         if (ctx->current_pos >= ctx->token_count || ctx->tokens[ctx->current_pos].type != TOKEN_SEMI) {
@@ -227,7 +226,7 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         ctx->current_pos++;
 
         // expect expression
-        NodeExpr *expr = parse_expr(ctx);
+        NodeExpr *expr = parse_expr(ctx, 0);
 
         // expect semicolon
         if (ctx->current_pos >= ctx->token_count || ctx->tokens[ctx->current_pos].type != TOKEN_SEMI) {

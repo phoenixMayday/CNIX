@@ -16,6 +16,19 @@ typedef enum {
     TOKEN_IDENT
 } TokenType;
 
+static int get_precedence(int token_type) {
+    switch (token_type) {
+        case TOKEN_MUL:
+        case TOKEN_DIV:
+            return 2;
+        case TOKEN_PLUS:
+        case TOKEN_MINUS:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
 typedef struct {
     TokenType type;
     char *value;
