@@ -6,10 +6,23 @@ typedef struct {
     int token_count;
 } ParserCtx;
 
+void expect_token(ParserCtx *ctx, TokenType expected_type) {
+    if (ctx->current_pos >= ctx->token_count || ctx->tokens[ctx->current_pos].type != expected_type) {
+        fprintf(stderr, "Expected token type %d\n", expected_type);
+        exit(EXIT_FAILURE);
+    }
+    ctx->current_pos++;
+}
+
+// Forward declarations
+typedef struct NodeExpr NodeExpr;
+NodeExpr *parse_expr(ParserCtx *ctx, int min_prec);
+
 // Terms
 typedef enum {
     NODE_TERM_INT_LIT,
-    NODE_TERM_IDENT
+    NODE_TERM_IDENT,
+    NODE_TERM_PAREN
 } NodeTermKind;
 
 typedef struct {
@@ -20,11 +33,16 @@ typedef struct {
     Token ident;
 } NodeTermIdent;
 
+typedef struct{
+    NodeExpr *expr;
+} NodeTermParen;
+
 typedef struct {
     NodeTermKind kind;
     union {
         NodeTermIntLit *int_lit;
         NodeTermIdent *ident;
+        NodeTermParen *paren;
     } as;
 } NodeTerm;
 
@@ -36,8 +54,6 @@ typedef enum {
     NODE_EXPR_DIV,
     NODE_EXPR_TERM
 } NodeExprKind;
-
-typedef struct NodeExpr NodeExpr;
 
 typedef struct {
     NodeExpr *lhs;
@@ -121,6 +137,20 @@ NodeTerm *parse_term(ParserCtx *ctx) {
 
         ctx->current_pos++;
         return term_node;
+    } else if (peek->type == TOKEN_OPEN_PAREN) {
+        ctx->current_pos++; // consume '('
+
+        // expect expression
+        NodeTermParen *paren_node = malloc(sizeof(NodeTermParen));
+        paren_node->expr = parse_expr(ctx, 0);
+
+        expect_token(ctx, TOKEN_CLOSE_PAREN); 
+
+        NodeTerm *term_node = malloc(sizeof(NodeTerm));
+        term_node->kind = NODE_TERM_PAREN;
+        term_node->as.paren = paren_node;
+
+        return term_node;
     }
     else {
         fprintf(stderr, "Unexpected token in term\n");
@@ -189,15 +219,17 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
     if (current->type == TOKEN_EXIT) {
         ctx->current_pos++;
 
+        // expect open parenethesis
+        expect_token(ctx, TOKEN_OPEN_PAREN);
+
         // expect expression
         NodeExpr *expr = parse_expr(ctx, 0);
 
+        // expect close parenthesis
+        expect_token(ctx, TOKEN_CLOSE_PAREN);
+
         // expect semicolon
-        if (ctx->current_pos >= ctx->token_count || ctx->tokens[ctx->current_pos].type != TOKEN_SEMI) {
-            fprintf(stderr, "Expected ';' at end of statement\n");
-            exit(EXIT_FAILURE);
-        }
-        ctx->current_pos++;
+        expect_token(ctx, TOKEN_SEMI);
 
         NodeStmtExit *stmt_exit = malloc(sizeof(NodeStmtExit));
         stmt_exit->expr = expr;
@@ -212,28 +244,16 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         Token ident_token = ctx->tokens[ctx->current_pos];
 
         // expect identifier
-        if (ctx->current_pos >= ctx->token_count || ctx->tokens[ctx->current_pos].type != TOKEN_IDENT) {
-            fprintf(stderr, "Expected identifier after 'var'\n");
-            exit(EXIT_FAILURE);
-        }
-        ctx->current_pos++;
+        expect_token(ctx, TOKEN_IDENT);
 
         // expect equals
-        if (ctx->current_pos >= ctx->token_count || ctx->tokens[ctx->current_pos].type != TOKEN_EQUALS) {
-            fprintf(stderr, "Expected '=' after variable name\n");
-            exit(EXIT_FAILURE);
-        }
-        ctx->current_pos++;
+        expect_token(ctx, TOKEN_EQUALS);
 
         // expect expression
         NodeExpr *expr = parse_expr(ctx, 0);
 
         // expect semicolon
-        if (ctx->current_pos >= ctx->token_count || ctx->tokens[ctx->current_pos].type != TOKEN_SEMI) {
-            fprintf(stderr, "Expected ';' at end of statement\n");
-            exit(EXIT_FAILURE);
-        }
-        ctx->current_pos++;
+        expect_token(ctx, TOKEN_SEMI);
 
         NodeStmtVar *stmt_var = malloc(sizeof(NodeStmtVar));
         stmt_var->ident = ident_token;

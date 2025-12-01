@@ -13,7 +13,9 @@ typedef enum {
     TOKEN_DIV,
     TOKEN_VAR,
     TOKEN_EQUALS,
-    TOKEN_IDENT
+    TOKEN_IDENT,
+    TOKEN_OPEN_PAREN,
+    TOKEN_CLOSE_PAREN
 } TokenType;
 
 static int get_precedence(int token_type) {
@@ -98,7 +100,12 @@ Token *tokenise(const char *str, int *out_count) {
             push_token(&tokens, &count, TOKEN_DIV, NULL);
         } else if (c == '=') {
             push_token(&tokens, &count, TOKEN_EQUALS, NULL);
-        } 
+        } else if (c == '(') {
+            push_token(&tokens, &count, TOKEN_OPEN_PAREN, NULL);
+        } else if (c == ')') {
+            push_token(&tokens, &count, TOKEN_CLOSE_PAREN, NULL);
+        }
+        
         else if (isspace(c)) {
             continue;
         }

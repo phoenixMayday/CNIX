@@ -62,6 +62,9 @@ void gen_expr(NodeExpr *expr, CodegenCtx *ctx) {
 
             append(&ctx->output, tmp);
             free(tmp);
+        } 
+        else if (term->kind == NODE_TERM_PAREN) {
+            gen_expr(term->as.paren->expr, ctx);
         }
         else {
             fprintf(stderr, "Unknown term kind in code generation\n");
