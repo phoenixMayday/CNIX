@@ -16,6 +16,7 @@ void expect_token(ParserCtx *ctx, TokenType expected_type) {
 
 // Forward declarations
 typedef struct NodeExpr NodeExpr;
+typedef struct NodeStmt NodeStmt;
 NodeExpr *parse_expr(ParserCtx *ctx, int min_prec);
 
 // Terms
@@ -75,7 +76,7 @@ typedef struct {
     NodeExpr *rhs;
 } NodeExprDiv;
 
-typedef struct NodeExpr{
+typedef struct NodeExpr {
     NodeExprKind kind;
     union {
         NodeExprAdd *add;
@@ -86,10 +87,17 @@ typedef struct NodeExpr{
     } as;
 } NodeExpr;
 
+// Scope
+typedef struct {
+    NodeStmt **stmts;
+    int stmt_count;
+} NodeScope;
+
 // Statements
 typedef enum {
     NODE_STMT_EXIT,
-    NODE_STMT_VAR
+    NODE_STMT_VAR,
+    NODE_STMT_SCOPE
 } NodeStmtKind;
 
 typedef struct {
@@ -102,18 +110,17 @@ typedef struct {
 } NodeStmtVar;
 
 typedef struct {
+    NodeScope *scope;
+} NodeStmtScope;
+
+typedef struct NodeStmt {
     NodeStmtKind kind;
     union {
         NodeStmtExit *stmt_exit;
         NodeStmtVar *stmt_var;
+        NodeStmtScope *stmt_scope;
     } as;
 } NodeStmt;
-
-// Scope
-typedef struct {
-    NodeStmt **stmts;
-    int stmt_count;
-} NodeScope;
 
 // Program
 typedef struct {
@@ -221,6 +228,29 @@ NodeExpr *parse_expr(ParserCtx *ctx, int min_prec) {
     return lhs_expr;
 }
 
+NodeStmt *parse_stmt(ParserCtx *ctx);
+
+NodeScope *parse_scope(ParserCtx *ctx) {
+    expect_token(ctx, TOKEN_OPEN_CURLY);
+
+    NodeScope *scope = malloc(sizeof(NodeScope));
+    scope->stmts = NULL;
+    scope->stmt_count = 0;
+
+    // parse statements until closing curly brace
+    // this will result in infinite loop if no close curly :(
+    while (ctx->current_pos < ctx->token_count && ctx->tokens[ctx->current_pos].type != TOKEN_CLOSE_CURLY) {
+        NodeStmt *stmt = parse_stmt(ctx);
+        scope->stmts = realloc(scope->stmts, sizeof(NodeStmt*) * (scope->stmt_count + 1));
+        scope->stmts[scope->stmt_count] = stmt;
+        scope->stmt_count++;
+    }
+
+    expect_token(ctx, TOKEN_CLOSE_CURLY);
+
+    return scope;
+}
+
 NodeStmt *parse_stmt(ParserCtx *ctx) {
     Token *current = &ctx->tokens[ctx->current_pos];
     if (current->type == TOKEN_EXIT) {
@@ -271,32 +301,23 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         stmt_node->as.stmt_var = stmt_var;
 
         return stmt_node;
+    } else if (current->type == TOKEN_OPEN_CURLY) {
+        // this is kinda messy with `NodeScope` and `NodeStmtScope` but oh well
+        NodeScope *scope = parse_scope(ctx);
+
+        NodeStmtScope *stmt_scope = malloc(sizeof(NodeStmtScope));
+        stmt_scope->scope = scope;
+
+        NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
+        stmt_node->kind = NODE_STMT_SCOPE;
+        stmt_node->as.stmt_scope = stmt_scope;
+
+        return stmt_node;
     }
     else {
         fprintf(stderr, "Unexpected token in statement\n");
         exit(EXIT_FAILURE);
     }
-}
-
-NodeScope *parse_scope(ParserCtx *ctx) {
-    expect_token(ctx, TOKEN_OPEN_CURLY);
-
-    NodeScope *scope = malloc(sizeof(NodeScope));
-    scope->stmts = NULL;
-    scope->stmt_count = 0;
-
-    // parse statements until closing curly brace
-    // this will result in infinite loop if no close curly :(
-    while (ctx->current_pos < ctx->token_count && ctx->tokens[ctx->current_pos].type != TOKEN_CLOSE_CURLY) {
-        NodeStmt *stmt = parse_stmt(ctx);
-        scope->stmts = realloc(scope->stmts, sizeof(NodeStmt*) * (scope->stmt_count + 1));
-        scope->stmts[scope->stmt_count] = stmt;
-        scope->stmt_count++;
-    }
-
-    expect_token(ctx, TOKEN_CLOSE_CURLY);
-
-    return scope;
 }
 
 NodeProg *parse_prog(Token **tokens, int token_count) {

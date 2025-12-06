@@ -116,41 +116,7 @@ void gen_expr(NodeExpr *expr, CodegenCtx *ctx) {
     }
 }
 
-void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
-    if (stmt->kind == NODE_STMT_EXIT)
-    {
-        gen_expr(stmt->as.stmt_exit->expr, ctx);
-
-        // syscall exit
-        append(&ctx->output,
-            "    mov $60, %rax\n"
-            "    pop %rdi\n"
-            "    syscall\n");
-
-        ctx->stack_size--;
-    } 
-    else if (stmt->kind == NODE_STMT_VAR) {
-        // check if var already exists
-        int var_index = get_var_index(ctx, stmt->as.stmt_var->ident.value);
-        if (var_index >= 0) {
-            fprintf(stderr, "Variable \"%s\" already defined\n", stmt->as.stmt_var->ident.value);
-            exit(EXIT_FAILURE);
-        }
-
-        // push expression result to top of stack
-        gen_expr(stmt->as.stmt_var->expr, ctx);
-
-        // push new variable to array
-        ctx->vars = realloc(ctx->vars, sizeof(Var) * (ctx->var_count + 1));
-        Var *new_var = &ctx->vars[ctx->var_count];
-        new_var->name = stmt->as.stmt_var->ident.value;
-        new_var->stack_loc = ctx->stack_size;
-        ctx->var_count++;
-    } else {
-        fprintf(stderr, "Unknown statement kind in code generation\n");
-        exit(EXIT_FAILURE);
-    }
-}
+void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx);
 
 void gen_scope(NodeScope *scope, CodegenCtx *ctx) {
     // push var count to scopes stack
@@ -185,6 +151,45 @@ void gen_scope(NodeScope *scope, CodegenCtx *ctx) {
     ctx->stack_size -= vars_to_pop;
     ctx->var_count = prev_var_count;
     ctx->vars = realloc(ctx->vars, sizeof(Var) * ctx->var_count);
+}
+
+void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
+    if (stmt->kind == NODE_STMT_EXIT)
+    {
+        gen_expr(stmt->as.stmt_exit->expr, ctx);
+
+        // syscall exit
+        append(&ctx->output,
+            "    mov $60, %rax\n"
+            "    pop %rdi\n"
+            "    syscall\n");
+
+        ctx->stack_size--;
+    } 
+    else if (stmt->kind == NODE_STMT_VAR) {
+        // check if var already exists
+        int var_index = get_var_index(ctx, stmt->as.stmt_var->ident.value);
+        if (var_index >= 0) {
+            fprintf(stderr, "Variable \"%s\" already defined\n", stmt->as.stmt_var->ident.value);
+            exit(EXIT_FAILURE);
+        }
+
+        // push expression result to top of stack
+        gen_expr(stmt->as.stmt_var->expr, ctx);
+
+        // push new variable to array
+        ctx->vars = realloc(ctx->vars, sizeof(Var) * (ctx->var_count + 1));
+        Var *new_var = &ctx->vars[ctx->var_count];
+        new_var->name = stmt->as.stmt_var->ident.value;
+        new_var->stack_loc = ctx->stack_size;
+        ctx->var_count++;
+    } else if (stmt->kind == NODE_STMT_SCOPE) {
+        gen_scope(stmt->as.stmt_scope->scope, ctx);
+    } 
+    else {
+        fprintf(stderr, "Unknown statement kind in code generation\n");
+        exit(EXIT_FAILURE);
+    }
 }
 
 char *gen_prog(NodeProg *prog) {
