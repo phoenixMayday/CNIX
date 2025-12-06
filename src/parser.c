@@ -109,6 +109,13 @@ typedef struct {
     } as;
 } NodeStmt;
 
+// Scope
+typedef struct {
+    NodeStmt **stmts;
+    int stmt_count;
+} NodeScope;
+
+// Program
 typedef struct {
     NodeStmt **stmts;
     int stmt_count;
@@ -269,6 +276,27 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         fprintf(stderr, "Unexpected token in statement\n");
         exit(EXIT_FAILURE);
     }
+}
+
+NodeScope *parse_scope(ParserCtx *ctx) {
+    expect_token(ctx, TOKEN_OPEN_CURLY);
+
+    NodeScope *scope = malloc(sizeof(NodeScope));
+    scope->stmts = NULL;
+    scope->stmt_count = 0;
+
+    // parse statements until closing curly brace
+    // this will result in infinite loop if no close curly :(
+    while (ctx->current_pos < ctx->token_count && ctx->tokens[ctx->current_pos].type != TOKEN_CLOSE_CURLY) {
+        NodeStmt *stmt = parse_stmt(ctx);
+        scope->stmts = realloc(scope->stmts, sizeof(NodeStmt*) * (scope->stmt_count + 1));
+        scope->stmts[scope->stmt_count] = stmt;
+        scope->stmt_count++;
+    }
+
+    expect_token(ctx, TOKEN_CLOSE_CURLY);
+
+    return scope;
 }
 
 NodeProg *parse_prog(Token **tokens, int token_count) {

@@ -10,6 +10,8 @@ typedef struct {
     Var *vars;
     int var_count;
     size_t stack_size;
+    size_t *scopes;
+    int scope_count;
 } CodegenCtx;
 
 int get_var_index(CodegenCtx *ctx, const char *name) {
@@ -30,6 +32,7 @@ static void append(char **buf, const char *text) {
 }
 
 void gen_expr(NodeExpr *expr, CodegenCtx *ctx) {
+    // Terms
     if (expr->kind == NODE_EXPR_TERM) {
         NodeTerm *term = expr->as.term;
         if (term->kind == NODE_TERM_INT_LIT) {
@@ -70,6 +73,7 @@ void gen_expr(NodeExpr *expr, CodegenCtx *ctx) {
             fprintf(stderr, "Unknown term kind in code generation\n");
             exit(EXIT_FAILURE);
         }
+    // Expressions
     } else if (expr->kind == NODE_EXPR_ADD) {
         gen_expr(expr->as.add->rhs, ctx);
         gen_expr(expr->as.add->lhs, ctx);
@@ -146,6 +150,41 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         fprintf(stderr, "Unknown statement kind in code generation\n");
         exit(EXIT_FAILURE);
     }
+}
+
+void gen_scope(NodeScope *scope, CodegenCtx *ctx) {
+    // push var count to scopes stack
+    ctx->scopes = realloc(ctx->scopes, sizeof(size_t) * (ctx->scope_count + 1));
+    ctx->scopes[ctx->scope_count] = ctx->var_count;
+    ctx->scope_count++;
+
+    // generate statements in scope
+    for (int i = 0; i < scope->stmt_count; i++) {
+        gen_stmt(scope->stmts[i], ctx);
+    }
+
+    // figure out how many vars to pop
+    size_t prev_var_count = ctx->scopes[ctx->scope_count - 1];
+    size_t vars_to_pop = ctx->var_count - prev_var_count;
+
+    ctx->scope_count--;
+
+    if (vars_to_pop == 0) {
+        return;
+    }
+
+    // adjust stack pointer
+    char *tmp;
+    asprintf(&tmp,
+        "    add $%zu, %%rsp\n",
+        vars_to_pop * 8);
+    append(&ctx->output, tmp);
+    free(tmp);
+
+    // update context
+    ctx->stack_size -= vars_to_pop;
+    ctx->var_count = prev_var_count;
+    ctx->vars = realloc(ctx->vars, sizeof(Var) * ctx->var_count);
 }
 
 char *gen_prog(NodeProg *prog) {
