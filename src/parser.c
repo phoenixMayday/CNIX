@@ -97,7 +97,8 @@ typedef struct {
 typedef enum {
     NODE_STMT_EXIT,
     NODE_STMT_VAR,
-    NODE_STMT_SCOPE
+    NODE_STMT_SCOPE,
+    NODE_STMT_IF
 } NodeStmtKind;
 
 typedef struct {
@@ -113,12 +114,18 @@ typedef struct {
     NodeScope *scope;
 } NodeStmtScope;
 
+typedef struct {
+    NodeExpr *expr;
+    NodeScope *scope;
+} NodeStmtIf;
+
 typedef struct NodeStmt {
     NodeStmtKind kind;
     union {
         NodeStmtExit *stmt_exit;
         NodeStmtVar *stmt_var;
         NodeStmtScope *stmt_scope;
+        NodeStmtIf *stmt_if;
     } as;
 } NodeStmt;
 
@@ -302,6 +309,7 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
 
         return stmt_node;
     } else if (current->type == TOKEN_OPEN_CURLY) {
+        ctx->current_pos++;
         // this is kinda messy with `NodeScope` and `NodeStmtScope` but oh well
         NodeScope *scope = parse_scope(ctx);
 
@@ -311,6 +319,23 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
         stmt_node->kind = NODE_STMT_SCOPE;
         stmt_node->as.stmt_scope = stmt_scope;
+
+        return stmt_node;
+    } else if (current->type == TOKEN_IF) {
+        ctx->current_pos++;
+
+        expect_token(ctx, TOKEN_OPEN_PAREN);
+        NodeExpr *expr = parse_expr(ctx, 0);
+        expect_token(ctx, TOKEN_CLOSE_PAREN);
+        NodeScope *scope = parse_scope(ctx);
+
+        NodeStmtIf *stmt_if = malloc(sizeof(NodeStmtIf));
+        stmt_if->expr = expr;
+        stmt_if->scope = scope;
+
+        NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
+        stmt_node->kind = NODE_STMT_IF;
+        stmt_node->as.stmt_if = stmt_if;
 
         return stmt_node;
     }

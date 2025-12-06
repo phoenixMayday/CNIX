@@ -12,6 +12,7 @@ typedef struct {
     size_t stack_size;
     size_t *scopes;
     int scope_count;
+    int label_count;
 } CodegenCtx;
 
 int get_var_index(CodegenCtx *ctx, const char *name) {
@@ -183,9 +184,32 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         new_var->name = stmt->as.stmt_var->ident.value;
         new_var->stack_loc = ctx->stack_size;
         ctx->var_count++;
-    } else if (stmt->kind == NODE_STMT_SCOPE) {
+    } 
+    else if (stmt->kind == NODE_STMT_SCOPE) {
         gen_scope(stmt->as.stmt_scope->scope, ctx);
     } 
+    else if (stmt->kind == NODE_STMT_IF) {
+        gen_expr(stmt->as.stmt_if->expr, ctx);
+
+        int label_id = ctx->label_count++;
+        char *tmp;
+        asprintf(&tmp, 
+            "    pop %%rax\n"
+            "    cmp $0, %%rax\n"
+            "    je .Lend_if_%d\n",
+            label_id);
+        append(&ctx->output, tmp);
+        free(tmp);
+        ctx->stack_size--;
+
+        gen_scope(stmt->as.stmt_if->scope, ctx);
+
+        asprintf(&tmp,
+            ".Lend_if_%d:\n",
+            label_id);
+        append(&ctx->output, tmp);
+        free(tmp);
+    }
     else {
         fprintf(stderr, "Unknown statement kind in code generation\n");
         exit(EXIT_FAILURE);
