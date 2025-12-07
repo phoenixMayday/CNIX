@@ -97,6 +97,7 @@ typedef struct {
 typedef enum {
     NODE_STMT_EXIT,
     NODE_STMT_VAR,
+    NODE_STMT_REASSIGN,
     NODE_STMT_SCOPE,
     NODE_STMT_IF
 } NodeStmtKind;
@@ -109,6 +110,11 @@ typedef struct {
     Token ident;
     NodeExpr *expr;
 } NodeStmtVar;
+
+typedef struct {
+    Token ident;
+    NodeExpr *expr;
+} NodeStmtReassign;
 
 typedef struct {
     NodeScope *scope;
@@ -124,6 +130,7 @@ typedef struct NodeStmt {
     union {
         NodeStmtExit *stmt_exit;
         NodeStmtVar *stmt_var;
+        NodeStmtReassign *stmt_reassign;
         NodeStmtScope *stmt_scope;
         NodeStmtIf *stmt_if;
     } as;
@@ -283,7 +290,8 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         stmt_node->as.stmt_exit = stmt_exit;
 
         return stmt_node;
-    } else if (current->type == TOKEN_VAR) {
+    } 
+    else if (current->type == TOKEN_VAR) {
         ctx->current_pos++;
         Token ident_token = ctx->tokens[ctx->current_pos];
 
@@ -308,7 +316,31 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         stmt_node->as.stmt_var = stmt_var;
 
         return stmt_node;
-    } else if (current->type == TOKEN_OPEN_CURLY) {
+    } 
+    else if (current->type == TOKEN_IDENT) {
+        Token ident_token = *current;
+        ctx->current_pos++;
+
+        // expect equals
+        expect_token(ctx, TOKEN_EQUALS);
+
+        // expect expression
+        NodeExpr *expr = parse_expr(ctx, 0);
+
+        // expect semicolon
+        expect_token(ctx, TOKEN_SEMI);
+
+        NodeStmtReassign *stmt_reassign = malloc(sizeof(NodeStmtReassign));
+        stmt_reassign->ident = ident_token;
+        stmt_reassign->expr = expr;
+
+        NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
+        stmt_node->kind = NODE_STMT_REASSIGN;
+        stmt_node->as.stmt_reassign = stmt_reassign;
+
+        return stmt_node;
+    } 
+    else if (current->type == TOKEN_OPEN_CURLY) {
         ctx->current_pos++;
         // this is kinda messy with `NodeScope` and `NodeStmtScope` but oh well
         NodeScope *scope = parse_scope(ctx);
@@ -321,7 +353,8 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         stmt_node->as.stmt_scope = stmt_scope;
 
         return stmt_node;
-    } else if (current->type == TOKEN_IF) {
+    }
+    else if (current->type == TOKEN_IF) {
         ctx->current_pos++;
 
         expect_token(ctx, TOKEN_OPEN_PAREN);

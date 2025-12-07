@@ -185,6 +185,29 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         new_var->stack_loc = ctx->stack_size;
         ctx->var_count++;
     } 
+    else if (stmt->kind == NODE_STMT_REASSIGN) {
+        // find variable
+        int var_index = get_var_index(ctx, stmt->as.stmt_reassign->ident.value);
+        if (var_index == -1) {
+            fprintf(stderr, "Undefined variable \"%s\"\n", stmt->as.stmt_reassign->ident.value);
+            exit(EXIT_FAILURE);
+        }
+
+        // generate expression
+        gen_expr(stmt->as.stmt_reassign->expr, ctx);
+
+        // pop expression result into variable's stack location
+        char *tmp;
+        asprintf(&tmp,
+            "    pop %%rax\n"
+            "    movq %%rax, %zu(%%rsp)\n",
+            // subtract 1 because we popped
+            (ctx->stack_size - 1 - ctx->vars[var_index].stack_loc) * 8);
+        append(&ctx->output, tmp);
+        free(tmp);
+
+        ctx->stack_size--;
+    }
     else if (stmt->kind == NODE_STMT_SCOPE) {
         gen_scope(stmt->as.stmt_scope->scope, ctx);
     } 
