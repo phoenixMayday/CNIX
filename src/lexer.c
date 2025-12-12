@@ -18,7 +18,8 @@ typedef enum {
     TOKEN_CLOSE_PAREN,
     TOKEN_OPEN_CURLY,
     TOKEN_CLOSE_CURLY,
-    TOKEN_IF
+    TOKEN_IF,
+    TOKEN_ELSE
 } TokenType;
 
 static int get_precedence(int token_type) {
@@ -77,6 +78,9 @@ Token *tokenise(const char *str, int *out_count) {
                 free(buf);
             } else if (strcmp(buf, "if") == 0) {
                 push_token(&tokens, &count, TOKEN_IF, NULL);
+                free(buf);
+            } else if (strcmp(buf, "else") == 0) {
+                push_token(&tokens, &count, TOKEN_ELSE, NULL);
                 free(buf);
             } else {
                 push_token(&tokens, &count, TOKEN_IDENT, buf);

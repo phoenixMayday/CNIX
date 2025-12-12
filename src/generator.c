@@ -214,24 +214,47 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
     else if (stmt->kind == NODE_STMT_IF) {
         gen_expr(stmt->as.stmt_if->expr, ctx);
 
-        int label_id = ctx->label_count++;
+        // jump to end or else if expr is 0 (false)
+        int if_end_label_id = ctx->label_count++;
         char *tmp;
         asprintf(&tmp, 
             "    pop %%rax\n"
             "    cmp $0, %%rax\n"
             "    je .Lend_if_%d\n",
-            label_id);
+            if_end_label_id);
         append(&ctx->output, tmp);
         free(tmp);
         ctx->stack_size--;
 
         gen_scope(stmt->as.stmt_if->scope, ctx);
 
-        asprintf(&tmp,
-            ".Lend_if_%d:\n",
-            label_id);
-        append(&ctx->output, tmp);
-        free(tmp);
+        // else scope
+        if (stmt->as.stmt_if->else_scope != NULL) {
+            int else_end_label_id = ctx->label_count++;
+
+            asprintf(&tmp,
+                "    jmp .Lend_if_%d\n" // jump to the end of the else (skip the else) if executed
+                ".Lend_if_%d:\n",       // end of the if (else start)
+                else_end_label_id,
+                if_end_label_id);
+            append(&ctx->output, tmp);
+            free(tmp);
+
+            gen_scope(stmt->as.stmt_if->else_scope, ctx);
+
+            asprintf(&tmp,
+                ".Lend_if_%d:\n",
+                else_end_label_id);
+            append(&ctx->output, tmp);
+            free(tmp);
+        } else {
+            // just end label
+            asprintf(&tmp,
+                ".Lend_if_%d:\n",
+                if_end_label_id);
+            append(&ctx->output, tmp);
+            free(tmp);
+        }
     }
     else {
         fprintf(stderr, "Unknown statement kind in code generation\n");

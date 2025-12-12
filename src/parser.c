@@ -99,7 +99,8 @@ typedef enum {
     NODE_STMT_VAR,
     NODE_STMT_REASSIGN,
     NODE_STMT_SCOPE,
-    NODE_STMT_IF
+    NODE_STMT_IF,
+    NODE_STMT_ELSE
 } NodeStmtKind;
 
 typedef struct {
@@ -123,6 +124,7 @@ typedef struct {
 typedef struct {
     NodeExpr *expr;
     NodeScope *scope;
+    NodeScope *else_scope;
 } NodeStmtIf;
 
 typedef struct NodeStmt {
@@ -244,7 +246,7 @@ NodeExpr *parse_expr(ParserCtx *ctx, int min_prec) {
 
 NodeStmt *parse_stmt(ParserCtx *ctx);
 
-NodeScope *parse_scope(ParserCtx *ctx) {
+NodeScope *parse_scope_block(ParserCtx *ctx) {
     expect_token(ctx, TOKEN_OPEN_CURLY);
 
     NodeScope *scope = malloc(sizeof(NodeScope));
@@ -253,16 +255,39 @@ NodeScope *parse_scope(ParserCtx *ctx) {
 
     // parse statements until closing curly brace
     // this will result in infinite loop if no close curly :(
-    while (ctx->current_pos < ctx->token_count && ctx->tokens[ctx->current_pos].type != TOKEN_CLOSE_CURLY) {
+    Token *peek = &ctx->tokens[ctx->current_pos];
+    while (ctx->current_pos < ctx->token_count && peek->type != TOKEN_CLOSE_CURLY) {
         NodeStmt *stmt = parse_stmt(ctx);
         scope->stmts = realloc(scope->stmts, sizeof(NodeStmt*) * (scope->stmt_count + 1));
         scope->stmts[scope->stmt_count] = stmt;
         scope->stmt_count++;
+        peek = &ctx->tokens[ctx->current_pos];
     }
 
     expect_token(ctx, TOKEN_CLOSE_CURLY);
 
     return scope;
+}
+
+// just a one-statement scope for else and if statements
+NodeScope *parse_implicit_scope(ParserCtx *ctx) {
+    NodeStmt *stmt = parse_stmt(ctx);
+
+    NodeScope *scope = malloc(sizeof(NodeScope));
+    scope->stmts = malloc(sizeof(NodeStmt*));
+    scope->stmts[0] = stmt;
+    scope->stmt_count = 1;
+
+    return scope;
+}
+
+NodeScope *parse_scope(ParserCtx *ctx) {
+    Token *peek = &ctx->tokens[ctx->current_pos];
+    if (peek->type == TOKEN_OPEN_CURLY) {
+        return parse_scope_block(ctx);
+    } else {
+        return parse_implicit_scope(ctx);
+    }
 }
 
 NodeStmt *parse_stmt(ParserCtx *ctx) {
@@ -343,7 +368,7 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
     else if (current->type == TOKEN_OPEN_CURLY) {
         ctx->current_pos++;
         // this is kinda messy with `NodeScope` and `NodeStmtScope` but oh well
-        NodeScope *scope = parse_scope(ctx);
+        NodeScope *scope = parse_scope_block(ctx);
 
         NodeStmtScope *stmt_scope = malloc(sizeof(NodeStmtScope));
         stmt_scope->scope = scope;
@@ -357,21 +382,33 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
     else if (current->type == TOKEN_IF) {
         ctx->current_pos++;
 
+        // expect expression in parentheses
         expect_token(ctx, TOKEN_OPEN_PAREN);
         NodeExpr *expr = parse_expr(ctx, 0);
         expect_token(ctx, TOKEN_CLOSE_PAREN);
+
+        // expect scope
         NodeScope *scope = parse_scope(ctx);
 
         NodeStmtIf *stmt_if = malloc(sizeof(NodeStmtIf));
         stmt_if->expr = expr;
         stmt_if->scope = scope;
+        stmt_if->else_scope = NULL;
+
+        // check for else
+        Token *peek = &ctx->tokens[ctx->current_pos];
+        if (ctx->current_pos < ctx->token_count && peek->type == TOKEN_ELSE) {
+            ctx->current_pos++;
+            NodeScope *else_scope = parse_scope(ctx);
+            stmt_if->else_scope = else_scope;
+        }
 
         NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
         stmt_node->kind = NODE_STMT_IF;
         stmt_node->as.stmt_if = stmt_if;
 
         return stmt_node;
-    }
+    } 
     else {
         fprintf(stderr, "Unexpected token in statement\n");
         exit(EXIT_FAILURE);
