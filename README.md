@@ -21,6 +21,13 @@ gcc -nostdlib asmtest.s -o asmtest
 		     | [expression] - [expression]
 		     | [expression] * [expression]
 		     | [expression] / [expression]
+		     | [expression] > [expression]
+		     | [expression] >= [expression]
+		     | [expression] < [expression]
+		     | [expression] <= [expression]
+		     | [expression] == [expression]
+		     | [expression] & [expression]
+		     | [expression] | [expression]
 		     | [term]
 
 [statement] = exit([expression]);
