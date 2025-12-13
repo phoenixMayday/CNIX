@@ -149,7 +149,7 @@ typedef enum {
     NODE_STMT_REASSIGN,
     NODE_STMT_SCOPE,
     NODE_STMT_IF,
-    NODE_STMT_ELSE
+    NODE_STMT_FOR
 } NodeStmtKind;
 
 typedef struct {
@@ -176,6 +176,13 @@ typedef struct {
     NodeScope *else_scope;
 } NodeStmtIf;
 
+typedef struct {
+    NodeStmt *init;
+    NodeExpr *condition;
+    NodeStmt *increment;
+    NodeScope *scope;
+} NodeStmtFor;
+
 typedef struct NodeStmt {
     NodeStmtKind kind;
     union {
@@ -184,6 +191,7 @@ typedef struct NodeStmt {
         NodeStmtReassign *stmt_reassign;
         NodeStmtScope *stmt_scope;
         NodeStmtIf *stmt_if;
+        NodeStmtFor *stmt_for;
     } as;
 } NodeStmt;
 
@@ -498,7 +506,35 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         stmt_node->as.stmt_if = stmt_if;
 
         return stmt_node;
-    } 
+    }
+    else if (current->type == TOKEN_FOR) {
+        ctx->current_pos++;
+
+        expect_token(ctx, TOKEN_OPEN_PAREN);
+
+        NodeStmt *init_stmt = parse_stmt(ctx);
+
+        NodeExpr *condition_expr = parse_expr(ctx, 0);
+        expect_token(ctx, TOKEN_SEMI);
+
+        NodeStmt *increment_stmt = parse_stmt(ctx);
+
+        expect_token(ctx, TOKEN_CLOSE_PAREN);
+
+        NodeScope *scope = parse_scope(ctx);
+
+        NodeStmtFor *stmt_for = malloc(sizeof(NodeStmtFor));
+        stmt_for->init = init_stmt;
+        stmt_for->condition = condition_expr;
+        stmt_for->increment = increment_stmt;
+        stmt_for->scope = scope;
+
+        NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
+        stmt_node->kind = NODE_STMT_FOR;
+        stmt_node->as.stmt_for = stmt_for;
+
+        return stmt_node;
+    }
     else {
         fprintf(stderr, "Unexpected token in statement\n");
         exit(EXIT_FAILURE);

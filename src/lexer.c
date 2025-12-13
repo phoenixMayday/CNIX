@@ -27,6 +27,7 @@ typedef enum {
     TOKEN_DOUBLE_EQUALS,
     TOKEN_AMPERSAND,
     TOKEN_PIPE,
+    TOKEN_FOR
 } TokenType;
 
 static int get_precedence(int token_type) {
@@ -99,6 +100,9 @@ Token *tokenise(const char *str, int *out_count) {
                 free(buf);
             } else if (strcmp(buf, "else") == 0) {
                 push_token(&tokens, &count, TOKEN_ELSE, NULL);
+                free(buf);
+            } else if (strcmp(buf, "for") == 0) {
+                push_token(&tokens, &count, TOKEN_FOR, NULL);
                 free(buf);
             } else {
                 push_token(&tokens, &count, TOKEN_IDENT, buf);

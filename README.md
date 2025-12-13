@@ -43,7 +43,18 @@ make run FILE=./examples/example.cnix
 [statement] = exit([expression]);
 			| var identifier = [expression];
 			| identifier = [expression];
+			| [scope]
 			| if ([expression]) [scope] [else]
+			| for ([for-init]; [for-condition]; [for-increment])
+			
+[for-init] = [statement]
+		   | ε
+		   
+[for-condition] = [expression]
+		        | ε
+ 
+[for-increment] = [statement]
+		        | ε
 
 [scope] = { [statement]* }
         | [statement]
