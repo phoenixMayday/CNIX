@@ -36,6 +36,12 @@
 *.x86_64
 *.hex
 
+# Project binary
+cnix
+main
+out.s
+out
+
 # Debug files
 *.dSYM/
 *.su

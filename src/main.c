@@ -1,10 +1,9 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
     
-// #include "lexer.c"
-// #include "parser.c"
 #include "generator.c"
 
 int main(int argc, char *argv[]) {
@@ -30,12 +29,12 @@ int main(int argc, char *argv[]) {
     buffer[length] = '\0';
     fclose(fptr);
 
-    printf("File content:\n%s\n", buffer);
+    printf("\nTokens:\n");
 
     int token_count;
     Token *tokens = tokenise(buffer, &token_count);
     for (int i = 0; i < token_count; i++) {
-        printf("Token: %s\n", 
+        printf("%s\n", 
             tokens[i].type == TOKEN_EXIT ? "EXIT" :
             tokens[i].type == TOKEN_INT_LIT ? "INT_LIT" :
             tokens[i].type == TOKEN_SEMI ? "SEMI" :
@@ -66,7 +65,7 @@ int main(int argc, char *argv[]) {
 
     NodeProg *prog = parse_prog(&tokens, token_count);
     char *asm_code = gen_prog(prog);
-    printf("Assembly code:\n%s\n", asm_code);
+    printf("\nx86 64 assembly:\n%s\n", asm_code);
     FILE *out_fptr = fopen("out.s", "w");
     fprintf(out_fptr, "%s", asm_code);
     fclose(out_fptr);

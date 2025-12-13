@@ -1,13 +1,23 @@
 # CNIX
 
-Compile with intermidary files and optimisation:
+## Requirements
+
+- **gcc**
+- **make**
+- **libc6-dev**
+- **x86-64 Linux system**
+
+All dependencies can be installed with `apt`:
+
 ```
-gcc -save-temps -O2 ctest.c -o ctest
+sudo apt update
+sudo apt install build-essential
 ```
 
-Assemble assembly files with GCC:
+## Build + run:
+
 ```
-gcc -nostdlib asmtest.s -o asmtest
+make run FILE=./examples/example.cnix 
 ```
 
 ## Grammar
@@ -42,4 +52,16 @@ gcc -nostdlib asmtest.s -o asmtest
 	   | ε
 
 [program] = [statement]*
+```
+
+## Useful commands:
+
+Compile with intermidary files and optimisation:
+```
+gcc -save-temps -O2 ctest.c -o ctest
+```
+
+Assemble assembly files with GCC:
+```
+gcc -nostdlib asmtest.s -o asmtest
 ```

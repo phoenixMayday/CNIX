@@ -76,7 +76,7 @@ Token *tokenise(const char *str, int *out_count) {
     Token *tokens = NULL;
     int count = 0;
 
-    for (int i = 0; i < strlen(str); i++) {
+    for (size_t i = 0; i < strlen(str); i++) {
         char c = str[i];
         if (isalpha(c)) {
             int start = i;
