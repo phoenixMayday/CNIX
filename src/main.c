@@ -58,6 +58,7 @@ int main(int argc, char *argv[]) {
             tokens[i].type == TOKEN_DOUBLE_EQUALS ? "DOUBLE_EQUALS" :
             tokens[i].type == TOKEN_AMPERSAND ? "AMPERSAND" :
             tokens[i].type == TOKEN_PIPE ? "PIPE" :
+            tokens[i].type == TOKEN_FOR ? "FOR" :
             "UNKNOWN"
         );
     }

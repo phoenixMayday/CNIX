@@ -45,7 +45,7 @@ make run FILE=./examples/example.cnix
 			| identifier = [expression];
 			| [scope]
 			| if ([expression]) [scope] [else]
-			| for ([for-init]; [for-condition]; [for-increment])
+			| for ([for-init]; [for-condition]; [for-increment];)
 			
 [for-init] = [statement]
 		   | ε

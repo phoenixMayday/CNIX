@@ -6,7 +6,7 @@ typedef struct {
     int token_count;
 } ParserCtx;
 
-void expect_token(ParserCtx *ctx, TokenType expected_type) {
+void expect_token(TokenType expected_type, ParserCtx *ctx) {
     if (ctx->current_pos >= ctx->token_count || ctx->tokens[ctx->current_pos].type != expected_type) {
         fprintf(stderr, "Expected token type %d\n", expected_type);
         exit(EXIT_FAILURE);
@@ -17,7 +17,7 @@ void expect_token(ParserCtx *ctx, TokenType expected_type) {
 // Forward declarations
 typedef struct NodeExpr NodeExpr;
 typedef struct NodeStmt NodeStmt;
-NodeExpr *parse_expr(ParserCtx *ctx, int min_prec);
+NodeExpr *parse_expr(int min_prec, ParserCtx *ctx);
 
 // Terms
 typedef enum {
@@ -208,36 +208,36 @@ NodeTerm *parse_term(ParserCtx *ctx) {
         NodeTermIntLit *int_lit_node = malloc(sizeof(NodeTermIntLit));
         int_lit_node->int_lit = *peek;
 
-        NodeTerm *term_node = malloc(sizeof(NodeTerm));
-        term_node->kind = NODE_TERM_INT_LIT;
-        term_node->as.int_lit = int_lit_node;
+        NodeTerm *term_base = malloc(sizeof(NodeTerm));
+        term_base->kind = NODE_TERM_INT_LIT;
+        term_base->as.int_lit = int_lit_node;
 
         ctx->current_pos++;
-        return term_node;
+        return term_base;
     } else if (peek->type == TOKEN_IDENT) {
         NodeTermIdent *ident_node = malloc(sizeof(NodeTermIdent));
         ident_node->ident = *peek;
         
-        NodeTerm *term_node = malloc(sizeof(NodeTerm));
-        term_node->kind = NODE_TERM_IDENT;
-        term_node->as.ident = ident_node;
+        NodeTerm *term_base = malloc(sizeof(NodeTerm));
+        term_base->kind = NODE_TERM_IDENT;
+        term_base->as.ident = ident_node;
 
         ctx->current_pos++;
-        return term_node;
+        return term_base;
     } else if (peek->type == TOKEN_OPEN_PAREN) {
         ctx->current_pos++; // consume '('
 
         // expect expression
         NodeTermParen *paren_node = malloc(sizeof(NodeTermParen));
-        paren_node->expr = parse_expr(ctx, 0);
+        paren_node->expr = parse_expr(0, ctx);
 
-        expect_token(ctx, TOKEN_CLOSE_PAREN); 
+        expect_token(TOKEN_CLOSE_PAREN, ctx);
 
-        NodeTerm *term_node = malloc(sizeof(NodeTerm));
-        term_node->kind = NODE_TERM_PAREN;
-        term_node->as.paren = paren_node;
+        NodeTerm *term_base = malloc(sizeof(NodeTerm));
+        term_base->kind = NODE_TERM_PAREN;
+        term_base->as.paren = paren_node;
 
-        return term_node;
+        return term_base;
     }
     else {
         fprintf(stderr, "Unexpected token in term\n");
@@ -245,7 +245,7 @@ NodeTerm *parse_term(ParserCtx *ctx) {
     }
 }
 
-NodeExpr *parse_expr(ParserCtx *ctx, int min_prec) {
+NodeExpr *parse_expr(int min_prec, ParserCtx *ctx) {
     // eval left term
     NodeTerm *lhs_term = parse_term(ctx);
     NodeExpr *lhs_expr = malloc(sizeof(NodeExpr));
@@ -262,7 +262,7 @@ NodeExpr *parse_expr(ParserCtx *ctx, int min_prec) {
         ctx->current_pos++;
 
         // parse right-hand side expression with higher precedence for left associativity
-        NodeExpr *rhs_expr = parse_expr(ctx, prec + 1);
+        NodeExpr *rhs_expr = parse_expr(prec + 1, ctx);
 
         NodeExpr *combined = malloc(sizeof(NodeExpr));
         if (op.type == TOKEN_PLUS) {
@@ -346,7 +346,7 @@ NodeExpr *parse_expr(ParserCtx *ctx, int min_prec) {
 NodeStmt *parse_stmt(ParserCtx *ctx);
 
 NodeScope *parse_scope_block(ParserCtx *ctx) {
-    expect_token(ctx, TOKEN_OPEN_CURLY);
+    expect_token(TOKEN_OPEN_CURLY, ctx);
 
     NodeScope *scope = malloc(sizeof(NodeScope));
     scope->stmts = NULL;
@@ -363,7 +363,7 @@ NodeScope *parse_scope_block(ParserCtx *ctx) {
         peek = &ctx->tokens[ctx->current_pos];
     }
 
-    expect_token(ctx, TOKEN_CLOSE_CURLY);
+    expect_token(TOKEN_CLOSE_CURLY, ctx);
 
     return scope;
 }
@@ -384,106 +384,111 @@ NodeScope *parse_scope(ParserCtx *ctx) {
     Token *peek = &ctx->tokens[ctx->current_pos];
     if (peek->type == TOKEN_OPEN_CURLY) {
         return parse_scope_block(ctx);
-    } else {
-        return parse_implicit_scope(ctx);
-    }
+    } 
+
+    return parse_implicit_scope(ctx);
 }
 
 NodeStmt *parse_stmt(ParserCtx *ctx) {
     Token *current = &ctx->tokens[ctx->current_pos];
+
     if (current->type == TOKEN_EXIT) {
         ctx->current_pos++;
 
         // expect open parenethesis
-        expect_token(ctx, TOKEN_OPEN_PAREN);
+        expect_token(TOKEN_OPEN_PAREN, ctx);
 
         // expect expression
-        NodeExpr *expr = parse_expr(ctx, 0);
+        NodeExpr *expr = parse_expr(0, ctx);
 
         // expect close parenthesis
-        expect_token(ctx, TOKEN_CLOSE_PAREN);
+        expect_token(TOKEN_CLOSE_PAREN, ctx);
 
         // expect semicolon
-        expect_token(ctx, TOKEN_SEMI);
+        expect_token(TOKEN_SEMI, ctx);
 
         NodeStmtExit *stmt_exit = malloc(sizeof(NodeStmtExit));
         stmt_exit->expr = expr;
 
-        NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
-        stmt_node->kind = NODE_STMT_EXIT;
-        stmt_node->as.stmt_exit = stmt_exit;
+        NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
+        stmt_base->kind = NODE_STMT_EXIT;
+        stmt_base->as.stmt_exit = stmt_exit;
 
-        return stmt_node;
+        return stmt_base;
     } 
-    else if (current->type == TOKEN_VAR) {
+    
+    if (current->type == TOKEN_VAR) {
         ctx->current_pos++;
         Token ident_token = ctx->tokens[ctx->current_pos];
 
         // expect identifier
-        expect_token(ctx, TOKEN_IDENT);
+        expect_token(TOKEN_IDENT, ctx);
 
         // expect equals
-        expect_token(ctx, TOKEN_EQUALS);
+        expect_token(TOKEN_EQUALS, ctx);
 
         // expect expression
-        NodeExpr *expr = parse_expr(ctx, 0);
+        NodeExpr *expr = parse_expr(0, ctx);
 
         // expect semicolon
-        expect_token(ctx, TOKEN_SEMI);
+        expect_token(TOKEN_SEMI, ctx);
 
         NodeStmtVar *stmt_var = malloc(sizeof(NodeStmtVar));
         stmt_var->ident = ident_token;
         stmt_var->expr = expr;
 
-        NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
-        stmt_node->kind = NODE_STMT_VAR;
-        stmt_node->as.stmt_var = stmt_var;
+        NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
+        stmt_base->kind = NODE_STMT_VAR;
+        stmt_base->as.stmt_var = stmt_var;
 
-        return stmt_node;
+        return stmt_base;
     } 
-    else if (current->type == TOKEN_IDENT) {
+    
+    if (current->type == TOKEN_IDENT) {
         Token ident_token = *current;
         ctx->current_pos++;
 
         // expect equals
-        expect_token(ctx, TOKEN_EQUALS);
+        expect_token(TOKEN_EQUALS, ctx);
 
         // expect expression
-        NodeExpr *expr = parse_expr(ctx, 0);
+        NodeExpr *expr = parse_expr(0, ctx);
 
         // expect semicolon
-        expect_token(ctx, TOKEN_SEMI);
+        expect_token(TOKEN_SEMI, ctx);
 
         NodeStmtReassign *stmt_reassign = malloc(sizeof(NodeStmtReassign));
         stmt_reassign->ident = ident_token;
         stmt_reassign->expr = expr;
 
-        NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
-        stmt_node->kind = NODE_STMT_REASSIGN;
-        stmt_node->as.stmt_reassign = stmt_reassign;
+        NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
+        stmt_base->kind = NODE_STMT_REASSIGN;
+        stmt_base->as.stmt_reassign = stmt_reassign;
 
-        return stmt_node;
+        return stmt_base;
     } 
-    else if (current->type == TOKEN_OPEN_CURLY) {
+    
+    if (current->type == TOKEN_OPEN_CURLY) {
         // this is kinda messy with `NodeScope` and `NodeStmtScope` but oh well
         NodeScope *scope = parse_scope_block(ctx);
 
         NodeStmtScope *stmt_scope = malloc(sizeof(NodeStmtScope));
         stmt_scope->scope = scope;
 
-        NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
-        stmt_node->kind = NODE_STMT_SCOPE;
-        stmt_node->as.stmt_scope = stmt_scope;
+        NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
+        stmt_base->kind = NODE_STMT_SCOPE;
+        stmt_base->as.stmt_scope = stmt_scope;
 
-        return stmt_node;
+        return stmt_base;
     }
-    else if (current->type == TOKEN_IF) {
+    
+    if (current->type == TOKEN_IF) {
         ctx->current_pos++;
 
         // expect expression in parentheses
-        expect_token(ctx, TOKEN_OPEN_PAREN);
-        NodeExpr *expr = parse_expr(ctx, 0);
-        expect_token(ctx, TOKEN_CLOSE_PAREN);
+        expect_token(TOKEN_OPEN_PAREN, ctx);
+        NodeExpr *expr = parse_expr(0, ctx);
+        expect_token(TOKEN_CLOSE_PAREN, ctx);
 
         // expect scope
         NodeScope *scope = parse_scope(ctx);
@@ -501,44 +506,76 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
             stmt_if->else_scope = else_scope;
         }
 
-        NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
-        stmt_node->kind = NODE_STMT_IF;
-        stmt_node->as.stmt_if = stmt_if;
+        NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
+        stmt_base->kind = NODE_STMT_IF;
+        stmt_base->as.stmt_if = stmt_if;
 
-        return stmt_node;
+        return stmt_base;
     }
-    else if (current->type == TOKEN_FOR) {
+
+    if (current->type == TOKEN_FOR) {
         ctx->current_pos++;
 
-        expect_token(ctx, TOKEN_OPEN_PAREN);
+        expect_token(TOKEN_OPEN_PAREN, ctx);
 
-        NodeStmt *init_stmt = parse_stmt(ctx);
+        // parse (optional) init statement 
+        NodeStmt *init_stmt = NULL;
+        Token *peek = &ctx->tokens[ctx->current_pos];
+        if (peek->type != TOKEN_SEMI) {
+            init_stmt = parse_stmt(ctx);
+        } else {
+            ctx->current_pos++; // consume semicolon
+        }
 
-        NodeExpr *condition_expr = parse_expr(ctx, 0);
-        expect_token(ctx, TOKEN_SEMI);
+        // parse (optional) condition expression 
+        NodeExpr *condition_expr = NULL;
+        peek = &ctx->tokens[ctx->current_pos];
+        if (peek->type != TOKEN_SEMI) {
+            condition_expr = parse_expr(0, ctx);
+        }
+        expect_token(TOKEN_SEMI, ctx);
 
-        NodeStmt *increment_stmt = parse_stmt(ctx);
+        // parse (optional) increment statement
+        NodeStmt *increment_stmt = NULL;
+        peek = &ctx->tokens[ctx->current_pos];
+        if (peek->type != TOKEN_SEMI) {
+            increment_stmt = parse_stmt(ctx);
+        } else {
+            ctx->current_pos++; // consume semicolon
+        }
 
-        expect_token(ctx, TOKEN_CLOSE_PAREN);
+        expect_token(TOKEN_CLOSE_PAREN, ctx);
 
-        NodeScope *scope = parse_scope(ctx);
+        NodeScope *scope_inner = parse_scope(ctx);
 
         NodeStmtFor *stmt_for = malloc(sizeof(NodeStmtFor));
         stmt_for->init = init_stmt;
         stmt_for->condition = condition_expr;
         stmt_for->increment = increment_stmt;
-        stmt_for->scope = scope;
+        stmt_for->scope = scope_inner;
 
-        NodeStmt *stmt_node = malloc(sizeof(NodeStmt));
-        stmt_node->kind = NODE_STMT_FOR;
-        stmt_node->as.stmt_for = stmt_for;
+        NodeStmt *stmt_base_inner = malloc(sizeof(NodeStmt));
+        stmt_base_inner->kind = NODE_STMT_FOR;
+        stmt_base_inner->as.stmt_for = stmt_for;
 
-        return stmt_node;
+        // wrap for loop in implicit scope so everything in init, condition, and increment is scoped
+        NodeScope *scope_outer = malloc(sizeof(NodeScope));
+        scope_outer->stmts = malloc(sizeof(NodeStmt*));
+        scope_outer->stmts[0] = stmt_base_inner;
+        scope_outer->stmt_count = 1;
+
+        NodeStmtScope *stmt_scope_outer = malloc(sizeof(NodeStmtScope));
+        stmt_scope_outer->scope = scope_outer;
+
+        NodeStmt *stmt_base_outer = malloc(sizeof(NodeStmt));
+        stmt_base_outer->kind = NODE_STMT_SCOPE;
+        stmt_base_outer->as.stmt_scope = stmt_scope_outer;
+
+        return stmt_base_outer;
     }
-    else {
-        fprintf(stderr, "Unexpected token in statement\n");
-        exit(EXIT_FAILURE);
-    }
+
+    fprintf(stderr, "Unexpected token in statement\n");
+    exit(EXIT_FAILURE);
 }
 
 NodeProg *parse_prog(Token **tokens, int token_count) {

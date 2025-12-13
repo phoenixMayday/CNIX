@@ -280,8 +280,57 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             free(tmp);
         }
     }
+    else if (stmt->kind == NODE_STMT_FOR) {
+        // init statement
+        if (stmt->as.stmt_for->init != NULL) {
+            gen_stmt(stmt->as.stmt_for->init, ctx);
+        }
+
+        int for_start_label_id = ctx->label_count++;
+        int for_end_label_id = ctx->label_count++;
+
+        // start label
+        char *tmp;
+        asprintf(&tmp,
+            ".Lstart_for_%d:\n",
+            for_start_label_id);
+        append(&ctx->output, tmp);
+        free(tmp);
+
+        // condition
+        if (stmt->as.stmt_for->condition != NULL) {
+            gen_expr(stmt->as.stmt_for->condition, ctx);
+
+            // jump to end if condition is false
+            asprintf(&tmp,
+                "    pop %%rax\n"
+                "    cmp $0, %%rax\n"
+                "    je .Lend_for_%d\n",
+                for_end_label_id);
+            append(&ctx->output, tmp);
+            free(tmp);
+            ctx->stack_size--;
+        }
+
+        // loop body
+        gen_scope(stmt->as.stmt_for->scope, ctx);
+
+        // increment
+        if (stmt->as.stmt_for->increment != NULL) {
+            gen_stmt(stmt->as.stmt_for->increment, ctx);
+        }
+
+        // jump back to start
+        asprintf(&tmp,
+            "    jmp .Lstart_for_%d\n"
+            ".Lend_for_%d:\n",
+            for_start_label_id,
+            for_end_label_id);
+        append(&ctx->output, tmp);
+        free(tmp);
+    }
     else {
-        fprintf(stderr, "Unknown statement kind in code generation\n");
+        fprintf(stderr, "Unknown statement kind in code generation: %d\n", stmt->kind);
         exit(EXIT_FAILURE);
     }
 }
