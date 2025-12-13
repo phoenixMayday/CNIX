@@ -111,6 +111,79 @@ void gen_expr(NodeExpr *expr, CodegenCtx *ctx) {
             "    div %rbx\n"
             "    push %rax\n");
         ctx->stack_size--;
+    } else if (expr->kind == NODE_EXPR_GTE) {
+        gen_expr(expr->as.gte->rhs, ctx);
+        gen_expr(expr->as.gte->lhs, ctx);
+        append(&ctx->output,
+            "    pop %rax\n"
+            "    pop %rbx\n"
+            "    cmp %rbx, %rax\n"
+            "    setge %al\n"
+            "    movzbq %al, %rax\n"
+            "    push %rax\n");
+        ctx->stack_size--;
+    } else if (expr->kind == NODE_EXPR_LTE) {
+        gen_expr(expr->as.lte->rhs, ctx);
+        gen_expr(expr->as.lte->lhs, ctx);
+        append(&ctx->output,
+            "    pop %rax\n"
+            "    pop %rbx\n"
+            "    cmp %rbx, %rax\n"
+            "    setle %al\n"
+            "    movzbq %al, %rax\n"
+            "    push %rax\n");
+        ctx->stack_size--;
+    } else if (expr->kind == NODE_EXPR_GT) {
+        gen_expr(expr->as.gt->rhs, ctx);
+        gen_expr(expr->as.gt->lhs, ctx);
+        append(&ctx->output,
+            "    pop %rax\n"
+            "    pop %rbx\n"
+            "    cmp %rbx, %rax\n"
+            "    setg %al\n"
+            "    movzbq %al, %rax\n"
+            "    push %rax\n");
+        ctx->stack_size--;
+    } else if (expr->kind == NODE_EXPR_LT) {
+        gen_expr(expr->as.lt->rhs, ctx);
+        gen_expr(expr->as.lt->lhs, ctx);
+        append(&ctx->output,
+            "    pop %rax\n"
+            "    pop %rbx\n"
+            "    cmp %rbx, %rax\n"
+            "    setl %al\n"
+            "    movzbq %al, %rax\n"
+            "    push %rax\n");
+        ctx->stack_size--;
+    } else if (expr->kind == NODE_EXPR_EQUALITY) {
+        gen_expr(expr->as.equality->rhs, ctx);
+        gen_expr(expr->as.equality->lhs, ctx);
+        append(&ctx->output,
+            "    pop %rax\n"
+            "    pop %rbx\n"
+            "    cmp %rbx, %rax\n"
+            "    sete %al\n"
+            "    movzbq %al, %rax\n"
+            "    push %rax\n");
+        ctx->stack_size--;
+    } else if (expr->kind == NODE_EXPR_AND) {
+        gen_expr(expr->as.and->rhs, ctx);
+        gen_expr(expr->as.and->lhs, ctx);
+        append(&ctx->output,
+            "    pop %rax\n"
+            "    pop %rbx\n"
+            "    and %rbx, %rax\n"
+            "    push %rax\n");
+        ctx->stack_size--;
+    } else if (expr->kind == NODE_EXPR_OR) {
+        gen_expr(expr->as.or->rhs, ctx);
+        gen_expr(expr->as.or->lhs, ctx);
+        append(&ctx->output,
+            "    pop %rax\n"
+            "    pop %rbx\n"
+            "    or %rbx, %rax\n"
+            "    push %rax\n");
+        ctx->stack_size--;
     } else {
         fprintf(stderr, "Unknown expression kind in code generation\n");
         exit(EXIT_FAILURE);

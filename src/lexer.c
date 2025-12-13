@@ -9,8 +9,8 @@ typedef enum {
     TOKEN_SEMI,
     TOKEN_PLUS,
     TOKEN_MINUS,
-    TOKEN_MUL,
-    TOKEN_DIV,
+    TOKEN_ASTERISK,
+    TOKEN_FSLASH,
     TOKEN_VAR,
     TOKEN_EQUALS,
     TOKEN_IDENT,
@@ -19,16 +19,34 @@ typedef enum {
     TOKEN_OPEN_CURLY,
     TOKEN_CLOSE_CURLY,
     TOKEN_IF,
-    TOKEN_ELSE
+    TOKEN_ELSE,
+    TOKEN_GT,
+    TOKEN_LT,
+    TOKEN_GTE,
+    TOKEN_LTE,
+    TOKEN_DOUBLE_EQUALS,
+    TOKEN_AMPERSAND,
+    TOKEN_PIPE,
 } TokenType;
 
 static int get_precedence(int token_type) {
     switch (token_type) {
-        case TOKEN_MUL:
-        case TOKEN_DIV:
-            return 2;
+        case TOKEN_ASTERISK:
+        case TOKEN_FSLASH:
+            return 6;
         case TOKEN_PLUS:
         case TOKEN_MINUS:
+            return 5;
+        case TOKEN_GTE:
+        case TOKEN_LTE:
+        case TOKEN_GT:
+        case TOKEN_LT:
+            return 4;
+        case TOKEN_DOUBLE_EQUALS:
+            return 3;
+        case TOKEN_AMPERSAND:
+            return 2;
+        case TOKEN_PIPE:
             return 1;
         default:
             return 0;
@@ -105,9 +123,12 @@ Token *tokenise(const char *str, int *out_count) {
         } else if (c == '-') {
             push_token(&tokens, &count, TOKEN_MINUS, NULL);
         } else if (c == '*') {
-            push_token(&tokens, &count, TOKEN_MUL, NULL);
+            push_token(&tokens, &count, TOKEN_ASTERISK, NULL);
         } else if (c == '/') {
-            push_token(&tokens, &count, TOKEN_DIV, NULL);
+            push_token(&tokens, &count, TOKEN_FSLASH, NULL);
+        } else if (c == '=' && str[i + 1] == '=') {
+            push_token(&tokens, &count, TOKEN_DOUBLE_EQUALS, NULL);
+            i++;
         } else if (c == '=') {
             push_token(&tokens, &count, TOKEN_EQUALS, NULL);
         } else if (c == '(') {
@@ -118,8 +139,21 @@ Token *tokenise(const char *str, int *out_count) {
             push_token(&tokens, &count, TOKEN_OPEN_CURLY, NULL);
         } else if (c == '}') {
             push_token(&tokens, &count, TOKEN_CLOSE_CURLY, NULL);
+        } else if (c == '>' && str[i + 1] == '=') {
+            push_token(&tokens, &count, TOKEN_GTE, NULL);
+            i++;
+        } else if (c == '<' && str[i + 1] == '=') {
+            push_token(&tokens, &count, TOKEN_LTE, NULL);
+            i++;
+        } else if (c == '>') {
+            push_token(&tokens, &count, TOKEN_GT, NULL);
+        } else if (c == '<') {
+            push_token(&tokens, &count, TOKEN_LT, NULL);
+        } else if (c == '&') {
+            push_token(&tokens, &count, TOKEN_AMPERSAND, NULL);
+        } else if (c == '|') {
+            push_token(&tokens, &count, TOKEN_PIPE, NULL);
         }
-        
         else if (isspace(c)) {
             continue;
         }

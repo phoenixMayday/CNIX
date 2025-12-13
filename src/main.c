@@ -41,11 +41,24 @@ int main(int argc, char *argv[]) {
             tokens[i].type == TOKEN_SEMI ? "SEMI" :
             tokens[i].type == TOKEN_PLUS ? "PLUS" : 
             tokens[i].type == TOKEN_MINUS ? "MINUS" :
-            tokens[i].type == TOKEN_MUL ? "MUL" :
-            tokens[i].type == TOKEN_DIV ? "DIV" :
+            tokens[i].type == TOKEN_ASTERISK ? "MUL" :
+            tokens[i].type == TOKEN_FSLASH ? "DIV" :
             tokens[i].type == TOKEN_VAR ? "VAR" :
             tokens[i].type == TOKEN_EQUALS ? "EQUALS" :
             tokens[i].type == TOKEN_IDENT ? "IDENT" :
+            tokens[i].type == TOKEN_OPEN_PAREN ? "OPEN_PAREN" :
+            tokens[i].type == TOKEN_CLOSE_PAREN ? "CLOSE_PAREN" :
+            tokens[i].type == TOKEN_OPEN_CURLY ? "OPEN_CURLY" :
+            tokens[i].type == TOKEN_CLOSE_CURLY ? "CLOSE_CURLY" :
+            tokens[i].type == TOKEN_IF ? "IF" :
+            tokens[i].type == TOKEN_ELSE ? "ELSE" :
+            tokens[i].type == TOKEN_GT ? "GT" :
+            tokens[i].type == TOKEN_LT ? "LT" :
+            tokens[i].type == TOKEN_GTE ? "GTE" :
+            tokens[i].type == TOKEN_LTE ? "LTE" :
+            tokens[i].type == TOKEN_DOUBLE_EQUALS ? "DOUBLE_EQUALS" :
+            tokens[i].type == TOKEN_AMPERSAND ? "AMPERSAND" :
+            tokens[i].type == TOKEN_PIPE ? "PIPE" :
             "UNKNOWN"
         );
     }

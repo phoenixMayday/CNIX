@@ -53,6 +53,13 @@ typedef enum {
     NODE_EXPR_SUB,
     NODE_EXPR_MUL,
     NODE_EXPR_DIV,
+    NODE_EXPR_GTE,
+    NODE_EXPR_LTE,
+    NODE_EXPR_GT,
+    NODE_EXPR_LT,
+    NODE_EXPR_EQUALITY,
+    NODE_EXPR_AND,
+    NODE_EXPR_OR,
     NODE_EXPR_TERM
 } NodeExprKind;
 
@@ -76,6 +83,41 @@ typedef struct {
     NodeExpr *rhs;
 } NodeExprDiv;
 
+typedef struct {
+    NodeExpr *lhs;
+    NodeExpr *rhs;
+} NodeExprGTE;
+
+typedef struct {
+    NodeExpr *lhs;
+    NodeExpr *rhs;
+} NodeExprLTE;
+
+typedef struct {
+    NodeExpr *lhs;
+    NodeExpr *rhs;
+} NodeExprGT;
+
+typedef struct {
+    NodeExpr *lhs;
+    NodeExpr *rhs;
+} NodeExprLT;
+
+typedef struct {
+    NodeExpr *lhs;
+    NodeExpr *rhs;
+} NodeExprEquality;
+
+typedef struct {
+    NodeExpr *lhs;
+    NodeExpr *rhs;
+} NodeExprAnd;
+
+typedef struct {
+    NodeExpr *lhs;
+    NodeExpr *rhs;
+} NodeExprOr;
+
 typedef struct NodeExpr {
     NodeExprKind kind;
     union {
@@ -83,6 +125,13 @@ typedef struct NodeExpr {
         NodeExprSub *sub;
         NodeExprMul *mul;
         NodeExprDiv *div;
+        NodeExprGTE *gte;
+        NodeExprLTE *lte;
+        NodeExprGT *gt;
+        NodeExprLT *lt;
+        NodeExprEquality *equality;
+        NodeExprAnd *and;
+        NodeExprOr *or;
         NodeTerm *term;
     } as;
 } NodeExpr;
@@ -220,18 +269,60 @@ NodeExpr *parse_expr(ParserCtx *ctx, int min_prec) {
             sub_node->rhs = rhs_expr;
             combined->kind = NODE_EXPR_SUB;
             combined->as.sub = sub_node;
-        } else if (op.type == TOKEN_MUL) {
+        } else if (op.type == TOKEN_ASTERISK) {
             NodeExprMul *mul_node = malloc(sizeof(NodeExprMul));
             mul_node->lhs = lhs_expr;
             mul_node->rhs = rhs_expr;
             combined->kind = NODE_EXPR_MUL;
             combined->as.mul = mul_node;
-        } else if (op.type == TOKEN_DIV) {
+        } else if (op.type == TOKEN_FSLASH) {
             NodeExprDiv *div_node = malloc(sizeof(NodeExprDiv));
             div_node->lhs = lhs_expr;
             div_node->rhs = rhs_expr;
             combined->kind = NODE_EXPR_DIV;
             combined->as.div = div_node;
+        } else if (op.type == TOKEN_GTE) {
+            NodeExprGTE *gte_node = malloc(sizeof(NodeExprGTE));
+            gte_node->lhs = lhs_expr;
+            gte_node->rhs = rhs_expr;
+            combined->kind = NODE_EXPR_GTE;
+            combined->as.gte = gte_node;
+        } else if (op.type == TOKEN_LTE) {
+            NodeExprLTE *lte_node = malloc(sizeof(NodeExprLTE));
+            lte_node->lhs = lhs_expr;
+            lte_node->rhs = rhs_expr;
+            combined->kind = NODE_EXPR_LTE;
+            combined->as.lte = lte_node;
+        } else if (op.type == TOKEN_GT) {
+            NodeExprGT *gt_node = malloc(sizeof(NodeExprGT));
+            gt_node->lhs = lhs_expr;
+            gt_node->rhs = rhs_expr;
+            combined->kind = NODE_EXPR_GT;
+            combined->as.gt = gt_node;
+        } else if (op.type == TOKEN_LT) {
+            NodeExprLT *lt_node = malloc(sizeof(NodeExprLT));
+            lt_node->lhs = lhs_expr;
+            lt_node->rhs = rhs_expr;
+            combined->kind = NODE_EXPR_LT;
+            combined->as.lt = lt_node;
+        } else if (op.type == TOKEN_DOUBLE_EQUALS) {
+            NodeExprEquality *equality_node = malloc(sizeof(NodeExprEquality));
+            equality_node->lhs = lhs_expr;
+            equality_node->rhs = rhs_expr;
+            combined->kind = NODE_EXPR_EQUALITY;
+            combined->as.equality = equality_node;
+        } else if (op.type == TOKEN_AMPERSAND) {
+            NodeExprAnd *and_node = malloc(sizeof(NodeExprAnd));
+            and_node->lhs = lhs_expr;
+            and_node->rhs = rhs_expr;
+            combined->kind = NODE_EXPR_AND;
+            combined->as.and = and_node;
+        } else if (op.type == TOKEN_PIPE) {
+            NodeExprOr *or_node = malloc(sizeof(NodeExprOr));
+            or_node->lhs = lhs_expr;
+            or_node->rhs = rhs_expr;
+            combined->kind = NODE_EXPR_OR;
+            combined->as.or = or_node;
         } else {
             fprintf(stderr, "Unexpected operator in expression: %d\n", op.type);
             exit(EXIT_FAILURE);
