@@ -457,7 +457,6 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         return stmt_node;
     } 
     else if (current->type == TOKEN_OPEN_CURLY) {
-        ctx->current_pos++;
         // this is kinda messy with `NodeScope` and `NodeStmtScope` but oh well
         NodeScope *scope = parse_scope_block(ctx);
 
