@@ -66,72 +66,12 @@ typedef enum {
 typedef struct {
     NodeExpr *lhs;
     NodeExpr *rhs;
-} NodeExprAdd;
-
-typedef struct {
-    NodeExpr *lhs;
-    NodeExpr *rhs;
-} NodeExprSub;
-
-typedef struct {
-    NodeExpr *lhs;
-    NodeExpr *rhs;
-} NodeExprMul;
-
-typedef struct {
-    NodeExpr *lhs;
-    NodeExpr *rhs;
-} NodeExprDiv;
-
-typedef struct {
-    NodeExpr *lhs;
-    NodeExpr *rhs;
-} NodeExprGTE;
-
-typedef struct {
-    NodeExpr *lhs;
-    NodeExpr *rhs;
-} NodeExprLTE;
-
-typedef struct {
-    NodeExpr *lhs;
-    NodeExpr *rhs;
-} NodeExprGT;
-
-typedef struct {
-    NodeExpr *lhs;
-    NodeExpr *rhs;
-} NodeExprLT;
-
-typedef struct {
-    NodeExpr *lhs;
-    NodeExpr *rhs;
-} NodeExprEquality;
-
-typedef struct {
-    NodeExpr *lhs;
-    NodeExpr *rhs;
-} NodeExprAnd;
-
-typedef struct {
-    NodeExpr *lhs;
-    NodeExpr *rhs;
-} NodeExprOr;
+} NodeExprBinary;
 
 typedef struct NodeExpr {
     NodeExprKind kind;
     union {
-        NodeExprAdd *add;
-        NodeExprSub *sub;
-        NodeExprMul *mul;
-        NodeExprDiv *div;
-        NodeExprGTE *gte;
-        NodeExprLTE *lte;
-        NodeExprGT *gt;
-        NodeExprLT *lt;
-        NodeExprEquality *equality;
-        NodeExprAnd *and;
-        NodeExprOr *or;
+        NodeExprBinary *bin;
         NodeTerm *term;
     } as;
 } NodeExpr;
@@ -264,76 +204,30 @@ NodeExpr *parse_expr(int min_prec, ParserCtx *ctx) {
         // parse right-hand side expression with higher precedence for left associativity
         NodeExpr *rhs_expr = parse_expr(prec + 1, ctx);
 
+        // create binary expression node
+        NodeExprBinary *bin_node = malloc(sizeof(NodeExprBinary));
+        bin_node->lhs = lhs_expr;
+        bin_node->rhs = rhs_expr;
+
+        // create combined expression with appropriate kind
         NodeExpr *combined = malloc(sizeof(NodeExpr));
-        if (op.type == TOKEN_PLUS) {
-            NodeExprAdd *add_node = malloc(sizeof(NodeExprAdd));
-            add_node->lhs = lhs_expr;
-            add_node->rhs = rhs_expr;
-            combined->kind = NODE_EXPR_ADD;
-            combined->as.add = add_node;
-        } else if (op.type == TOKEN_MINUS) {
-            NodeExprSub *sub_node = malloc(sizeof(NodeExprSub));
-            sub_node->lhs = lhs_expr;
-            sub_node->rhs = rhs_expr;
-            combined->kind = NODE_EXPR_SUB;
-            combined->as.sub = sub_node;
-        } else if (op.type == TOKEN_ASTERISK) {
-            NodeExprMul *mul_node = malloc(sizeof(NodeExprMul));
-            mul_node->lhs = lhs_expr;
-            mul_node->rhs = rhs_expr;
-            combined->kind = NODE_EXPR_MUL;
-            combined->as.mul = mul_node;
-        } else if (op.type == TOKEN_FSLASH) {
-            NodeExprDiv *div_node = malloc(sizeof(NodeExprDiv));
-            div_node->lhs = lhs_expr;
-            div_node->rhs = rhs_expr;
-            combined->kind = NODE_EXPR_DIV;
-            combined->as.div = div_node;
-        } else if (op.type == TOKEN_GTE) {
-            NodeExprGTE *gte_node = malloc(sizeof(NodeExprGTE));
-            gte_node->lhs = lhs_expr;
-            gte_node->rhs = rhs_expr;
-            combined->kind = NODE_EXPR_GTE;
-            combined->as.gte = gte_node;
-        } else if (op.type == TOKEN_LTE) {
-            NodeExprLTE *lte_node = malloc(sizeof(NodeExprLTE));
-            lte_node->lhs = lhs_expr;
-            lte_node->rhs = rhs_expr;
-            combined->kind = NODE_EXPR_LTE;
-            combined->as.lte = lte_node;
-        } else if (op.type == TOKEN_GT) {
-            NodeExprGT *gt_node = malloc(sizeof(NodeExprGT));
-            gt_node->lhs = lhs_expr;
-            gt_node->rhs = rhs_expr;
-            combined->kind = NODE_EXPR_GT;
-            combined->as.gt = gt_node;
-        } else if (op.type == TOKEN_LT) {
-            NodeExprLT *lt_node = malloc(sizeof(NodeExprLT));
-            lt_node->lhs = lhs_expr;
-            lt_node->rhs = rhs_expr;
-            combined->kind = NODE_EXPR_LT;
-            combined->as.lt = lt_node;
-        } else if (op.type == TOKEN_DOUBLE_EQUALS) {
-            NodeExprEquality *equality_node = malloc(sizeof(NodeExprEquality));
-            equality_node->lhs = lhs_expr;
-            equality_node->rhs = rhs_expr;
-            combined->kind = NODE_EXPR_EQUALITY;
-            combined->as.equality = equality_node;
-        } else if (op.type == TOKEN_AMPERSAND) {
-            NodeExprAnd *and_node = malloc(sizeof(NodeExprAnd));
-            and_node->lhs = lhs_expr;
-            and_node->rhs = rhs_expr;
-            combined->kind = NODE_EXPR_AND;
-            combined->as.and = and_node;
-        } else if (op.type == TOKEN_PIPE) {
-            NodeExprOr *or_node = malloc(sizeof(NodeExprOr));
-            or_node->lhs = lhs_expr;
-            or_node->rhs = rhs_expr;
-            combined->kind = NODE_EXPR_OR;
-            combined->as.or = or_node;
-        } else {
-            fprintf(stderr, "Unexpected operator in expression: %d\n", op.type);
-            exit(EXIT_FAILURE);
+        combined->as.bin = bin_node;
+        
+        switch (op.type) {
+            case TOKEN_PLUS: combined->kind = NODE_EXPR_ADD; break;
+            case TOKEN_MINUS: combined->kind = NODE_EXPR_SUB; break;
+            case TOKEN_ASTERISK: combined->kind = NODE_EXPR_MUL; break;
+            case TOKEN_FSLASH: combined->kind = NODE_EXPR_DIV; break;
+            case TOKEN_GTE: combined->kind = NODE_EXPR_GTE; break;
+            case TOKEN_LTE: combined->kind = NODE_EXPR_LTE; break;
+            case TOKEN_GT: combined->kind = NODE_EXPR_GT; break;
+            case TOKEN_LT: combined->kind = NODE_EXPR_LT; break;
+            case TOKEN_DOUBLE_EQUALS: combined->kind = NODE_EXPR_EQUALITY; break;
+            case TOKEN_AMPERSAND: combined->kind = NODE_EXPR_AND; break;
+            case TOKEN_PIPE: combined->kind = NODE_EXPR_OR; break;
+            default:
+                fprintf(stderr, "Unexpected operator in expression: %d\n", op.type);
+                exit(EXIT_FAILURE);
         }
 
         // make combined expression the new lhs

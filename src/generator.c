@@ -1,3 +1,5 @@
+#include <stdarg.h>
+
 #include "parser.c"
 
 typedef struct {
@@ -32,21 +34,31 @@ static void append(char **buf, const char *text) {
     memcpy(*buf + old_len, text, add_len + 1);
 }
 
+// variadic append function
+static void appendf(char **buf, const char *fmt, ...) {
+    va_list args;
+    char *tmp;
+    
+    va_start(args, fmt);
+    vasprintf(&tmp, fmt, args);
+    va_end(args);
+    
+    append(buf, tmp);
+    free(tmp);
+}
+
 void gen_expr(NodeExpr *expr, CodegenCtx *ctx);
 
 // helper function for binary expressions
 static void gen_binary_op(NodeExpr *lhs, NodeExpr *rhs, const char *op_asm, CodegenCtx *ctx) {
     gen_expr(rhs, ctx);
     gen_expr(lhs, ctx);
-    char *tmp;
-    asprintf(&tmp,
-        "    pop %%rax\n"
-        "    pop %%rbx\n"
+    appendf(&ctx->output,
+        "    popq %%rax\n"
+        "    popq %%rbx\n"
         "%s"
-        "    push %%rax\n",
+        "    pushq %%rax\n",
         op_asm);
-    append(&ctx->output, tmp);
-    free(tmp);
     ctx->stack_size--;
 }
 
@@ -54,32 +66,25 @@ static void gen_binary_op(NodeExpr *lhs, NodeExpr *rhs, const char *op_asm, Code
 static void gen_comparison_op(NodeExpr *lhs, NodeExpr *rhs, const char *op_asm, CodegenCtx *ctx) {
     gen_expr(rhs, ctx);
     gen_expr(lhs, ctx);
-    char *tmp;
-    asprintf(&tmp,
-        "    pop %%rax\n"
-        "    pop %%rbx\n"
-        "    cmp %%rbx, %%rax\n"
+    appendf(&ctx->output,
+        "    popq %%rax\n"
+        "    popq %%rbx\n"
+        "    cmpq %%rbx, %%rax\n"
         "%s"
         "    movzbq %%al, %%rax\n"
-        "    push %%rax\n",
+        "    pushq %%rax\n",
         op_asm);
-    append(&ctx->output, tmp);
-    free(tmp);
     ctx->stack_size--;
 }
 
 void gen_term(NodeTerm *term, CodegenCtx *ctx) {
     if (term->kind == NODE_TERM_INT_LIT) {
-        char *tmp;
-        asprintf(&tmp,
-            "    mov $%s, %%rax\n"
-            "    push %%rax\n",
-            term->as.int_lit->int_lit.value);
-
         ctx->stack_size++;
         
-        append(&ctx->output, tmp);
-        free(tmp);
+        appendf(&ctx->output,
+            "    movq $%s, %%rax\n"
+            "    pushq %%rax\n",
+            term->as.int_lit->int_lit.value);
     } 
     else if (term->kind == NODE_TERM_IDENT) {
         // find variable
@@ -90,15 +95,11 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         }
 
         // push copy of variable's value to top of stack
-        char *tmp;
-        asprintf(&tmp,
+        appendf(&ctx->output,
             "    pushq %zu(%%rsp)\n",
             (ctx->stack_size - ctx->vars[var_index].stack_loc) * 8);
-        
-        ctx->stack_size++;
 
-        append(&ctx->output, tmp);
-        free(tmp);
+        ctx->stack_size++;
     } 
     else if (term->kind == NODE_TERM_PAREN) {
         gen_expr(term->as.paren->expr, ctx);
@@ -114,27 +115,27 @@ void gen_expr(NodeExpr *expr, CodegenCtx *ctx) {
         NodeTerm *term = expr->as.term;
         gen_term(term, ctx);
     } else if (expr->kind == NODE_EXPR_ADD) {
-        gen_binary_op(expr->as.add->lhs, expr->as.add->rhs, "    add %rbx, %rax\n", ctx);
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    addq %rbx, %rax\n", ctx);
     } else if (expr->kind == NODE_EXPR_SUB) {
-        gen_binary_op(expr->as.sub->lhs, expr->as.sub->rhs, "    sub %rbx, %rax\n", ctx);
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    subq %rbx, %rax\n", ctx);
     } else if (expr->kind == NODE_EXPR_MUL) {
-        gen_binary_op(expr->as.mul->lhs, expr->as.mul->rhs, "    mul %rbx\n", ctx);
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    mulq %rbx\n", ctx);
     } else if (expr->kind == NODE_EXPR_DIV) {
-        gen_binary_op(expr->as.div->lhs, expr->as.div->rhs, "    div %rbx\n", ctx);
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    divq %rbx\n", ctx);
     } else if (expr->kind == NODE_EXPR_GTE) {
-        gen_comparison_op(expr->as.gte->lhs, expr->as.gte->rhs, "    setge %al\n", ctx);
+        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    setge %al\n", ctx);
     } else if (expr->kind == NODE_EXPR_LTE) {
-        gen_comparison_op(expr->as.lte->lhs, expr->as.lte->rhs, "    setle %al\n", ctx);
+        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    setle %al\n", ctx);
     } else if (expr->kind == NODE_EXPR_GT) {
-        gen_comparison_op(expr->as.gt->lhs, expr->as.gt->rhs, "    setg %al\n", ctx);
+        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    setg %al\n", ctx);
     } else if (expr->kind == NODE_EXPR_LT) {
-        gen_comparison_op(expr->as.lt->lhs, expr->as.lt->rhs, "    setl %al\n", ctx);
+        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    setl %al\n", ctx);
     } else if (expr->kind == NODE_EXPR_EQUALITY) {
-        gen_comparison_op(expr->as.equality->lhs, expr->as.equality->rhs, "    sete %al\n", ctx);
+        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    sete %al\n", ctx);
     } else if (expr->kind == NODE_EXPR_AND) {
-        gen_binary_op(expr->as.and->lhs, expr->as.and->rhs, "    and %rbx, %rax\n", ctx);
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    andq %rbx, %rax\n", ctx);
     } else if (expr->kind == NODE_EXPR_OR) {
-        gen_binary_op(expr->as.or->lhs, expr->as.or->rhs, "    or %rbx, %rax\n", ctx);
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    orq %rbx, %rax\n", ctx);
     } else {
         fprintf(stderr, "Unknown expression kind in code generation\n");
         exit(EXIT_FAILURE);
@@ -165,12 +166,9 @@ void gen_scope(NodeScope *scope, CodegenCtx *ctx) {
     }
 
     // adjust stack pointer
-    char *tmp;
-    asprintf(&tmp,
+    appendf(&ctx->output,
         "    add $%zu, %%rsp\n",
         vars_to_pop * 8);
-    append(&ctx->output, tmp);
-    free(tmp);
 
     // update context
     ctx->stack_size -= vars_to_pop;
@@ -184,9 +182,9 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         gen_expr(stmt->as.stmt_exit->expr, ctx);
 
         // syscall exit
-        append(&ctx->output,
-            "    mov $60, %rax\n"
-            "    pop %rdi\n"
+        appendf(&ctx->output,
+            "    movq $60, %%rax\n"
+            "    popq %%rdi\n"
             "    syscall\n");
 
         ctx->stack_size--;
@@ -221,14 +219,11 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         gen_expr(stmt->as.stmt_reassign->expr, ctx);
 
         // pop expression result into variable's stack location
-        char *tmp;
-        asprintf(&tmp,
-            "    pop %%rax\n"
+        appendf(&ctx->output,
+            "    popq %%rax\n"
             "    movq %%rax, %zu(%%rsp)\n",
             // subtract 1 because we popped
             (ctx->stack_size - 1 - ctx->vars[var_index].stack_loc) * 8);
-        append(&ctx->output, tmp);
-        free(tmp);
 
         ctx->stack_size--;
     }
@@ -240,14 +235,11 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
 
         // jump to end or else if expr is 0 (false)
         int if_end_label_id = ctx->label_count++;
-        char *tmp;
-        asprintf(&tmp, 
-            "    pop %%rax\n"
-            "    cmp $0, %%rax\n"
+        appendf(&ctx->output, 
+            "    popq %%rax\n"
+            "    cmpq $0, %%rax\n"
             "    je .Lend_if_%d\n",
             if_end_label_id);
-        append(&ctx->output, tmp);
-        free(tmp);
         ctx->stack_size--;
 
         gen_scope(stmt->as.stmt_if->scope, ctx);
@@ -256,28 +248,22 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         if (stmt->as.stmt_if->else_scope != NULL) {
             int else_end_label_id = ctx->label_count++;
 
-            asprintf(&tmp,
+            appendf(&ctx->output,
                 "    jmp .Lend_if_%d\n" // jump to the end of the else (skip the else) if executed
                 ".Lend_if_%d:\n",       // end of the if (else start)
                 else_end_label_id,
                 if_end_label_id);
-            append(&ctx->output, tmp);
-            free(tmp);
 
             gen_scope(stmt->as.stmt_if->else_scope, ctx);
 
-            asprintf(&tmp,
+            appendf(&ctx->output,
                 ".Lend_if_%d:\n",
                 else_end_label_id);
-            append(&ctx->output, tmp);
-            free(tmp);
         } else {
             // just end label
-            asprintf(&tmp,
+            appendf(&ctx->output,
                 ".Lend_if_%d:\n",
                 if_end_label_id);
-            append(&ctx->output, tmp);
-            free(tmp);
         }
     }
     else if (stmt->kind == NODE_STMT_FOR) {
@@ -290,25 +276,20 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         int for_end_label_id = ctx->label_count++;
 
         // start label
-        char *tmp;
-        asprintf(&tmp,
+        appendf(&ctx->output,
             ".Lstart_for_%d:\n",
             for_start_label_id);
-        append(&ctx->output, tmp);
-        free(tmp);
 
         // condition
         if (stmt->as.stmt_for->condition != NULL) {
             gen_expr(stmt->as.stmt_for->condition, ctx);
 
             // jump to end if condition is false
-            asprintf(&tmp,
-                "    pop %%rax\n"
-                "    cmp $0, %%rax\n"
+            appendf(&ctx->output,
+                "    popq %%rax\n"
+                "    cmpq $0, %%rax\n"
                 "    je .Lend_for_%d\n",
                 for_end_label_id);
-            append(&ctx->output, tmp);
-            free(tmp);
             ctx->stack_size--;
         }
 
@@ -321,13 +302,11 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         }
 
         // jump back to start
-        asprintf(&tmp,
+        appendf(&ctx->output,
             "    jmp .Lstart_for_%d\n"
             ".Lend_for_%d:\n",
             for_start_label_id,
             for_end_label_id);
-        append(&ctx->output, tmp);
-        free(tmp);
     }
     else {
         fprintf(stderr, "Unknown statement kind in code generation: %d\n", stmt->kind);
