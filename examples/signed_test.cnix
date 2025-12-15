@@ -1,0 +1,5 @@
+int8 a = -5;
+int16 b = -1000;
+uint8 c = 255;
+int32 result = a + b;
+exit(result);

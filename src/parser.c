@@ -99,7 +99,7 @@ typedef struct {
 typedef struct {
     Token ident;
     NodeExpr *expr;
-    TokenType var_type; // TOKEN_BYTE, TOKEN_WORD, TOKEN_LONG, or TOKEN_QWORD
+    TokenType var_type;
 } NodeStmtAssignVar;
 
 typedef struct {
@@ -313,7 +313,12 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
     } 
     
     if (current->type == TOKEN_BYTE || current->type == TOKEN_WORD ||
-        current->type == TOKEN_LONG || current->type == TOKEN_QWORD) {
+        current->type == TOKEN_LONG || current->type == TOKEN_QWORD ||
+        current->type == TOKEN_INT8 || current->type == TOKEN_INT16 ||
+        current->type == TOKEN_INT32 || current->type == TOKEN_INT64 ||
+        current->type == TOKEN_UINT8 || current->type == TOKEN_UINT16 ||
+        current->type == TOKEN_UINT32 || current->type == TOKEN_UINT64 ||
+        current->type == TOKEN_CHAR) {
         
         TokenType var_type = current->type;
         ctx->current_pos++;

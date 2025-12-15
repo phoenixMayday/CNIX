@@ -62,6 +62,15 @@ int main(int argc, char *argv[]) {
             tokens[i].type == TOKEN_WORD ? "WORD" :
             tokens[i].type == TOKEN_LONG ? "LONG" :
             tokens[i].type == TOKEN_QWORD ? "QWORD" :
+            tokens[i].type == TOKEN_INT8 ? "INT8" :
+            tokens[i].type == TOKEN_INT16 ? "INT16" :
+            tokens[i].type == TOKEN_INT32 ? "INT32" :
+            tokens[i].type == TOKEN_INT64 ? "INT64" :
+            tokens[i].type == TOKEN_UINT8 ? "UINT8" :
+            tokens[i].type == TOKEN_UINT16 ? "UINT16" :
+            tokens[i].type == TOKEN_UINT32 ? "UINT32" :
+            tokens[i].type == TOKEN_UINT64 ? "UINT64" :
+            tokens[i].type == TOKEN_CHAR ? "CHAR" :
             "UNKNOWN"
         );
     }

@@ -30,7 +30,16 @@ typedef enum {
     TOKEN_BYTE,
     TOKEN_WORD,
     TOKEN_LONG,
-    TOKEN_QWORD
+    TOKEN_QWORD,
+    TOKEN_INT8,
+    TOKEN_INT16,
+    TOKEN_INT32,
+    TOKEN_INT64,
+    TOKEN_UINT8,
+    TOKEN_UINT16,
+    TOKEN_UINT32,
+    TOKEN_UINT64,
+    TOKEN_CHAR
 } TokenType;
 
 static int get_precedence(int token_type) {
@@ -82,6 +91,7 @@ Token *tokenise(const char *str, int *out_count) {
 
     for (size_t i = 0; i < strlen(str); i++) {
         char c = str[i];
+        char c_next = str[i + 1];
         if (isalpha(c)) {
             int start = i;
             int len = 0;
@@ -116,13 +126,45 @@ Token *tokenise(const char *str, int *out_count) {
             } else if (strcmp(buf, "qword") == 0) {
                 push_token(&tokens, &count, TOKEN_QWORD, NULL);
                 free(buf);
+            } else if (strcmp(buf, "int8") == 0) {
+                push_token(&tokens, &count, TOKEN_INT8, NULL);
+                free(buf);
+            } else if (strcmp(buf, "int16") == 0) {
+                push_token(&tokens, &count, TOKEN_INT16, NULL);
+                free(buf);
+            } else if (strcmp(buf, "int32") == 0) {
+                push_token(&tokens, &count, TOKEN_INT32, NULL);
+                free(buf);
+            } else if (strcmp(buf, "int64") == 0) {
+                push_token(&tokens, &count, TOKEN_INT64, NULL);
+                free(buf);
+            } else if (strcmp(buf, "uint8") == 0) {
+                push_token(&tokens, &count, TOKEN_UINT8, NULL);
+                free(buf);
+            } else if (strcmp(buf, "uint16") == 0) {
+                push_token(&tokens, &count, TOKEN_UINT16, NULL);
+                free(buf);
+            } else if (strcmp(buf, "uint32") == 0) {
+                push_token(&tokens, &count, TOKEN_UINT32, NULL);
+                free(buf);
+            } else if (strcmp(buf, "uint64") == 0) {
+                push_token(&tokens, &count, TOKEN_UINT64, NULL);
+                free(buf);
+            } else if (strcmp(buf, "char") == 0) {
+                push_token(&tokens, &count, TOKEN_CHAR, NULL);
+                free(buf);
             } else {
                 push_token(&tokens, &count, TOKEN_IDENT, buf);
             }
         }
-        else if (isdigit(c)) {
+        else if (isdigit(c) || (c == '-' && isdigit(c_next))) {
             int start = i;
             int len = 0;
+
+            // handle optional negative sign
+            if (c == '-') {
+                len++;
+            }
 
             while (isdigit(str[i + len]))
                 len++;
