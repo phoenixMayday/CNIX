@@ -2,9 +2,17 @@
 
 #include "parser.c"
 
+typedef enum {
+    VAR_TYPE_BYTE = 1,  // 1 byte
+    VAR_TYPE_WORD = 2,  // 2 bytes
+    VAR_TYPE_LONG = 4,  // 4 bytes
+    VAR_TYPE_QWORD = 8  // 8 bytes
+} VarType;
+
 typedef struct {
     char *name;
     size_t stack_loc;
+    VarType type;
 } Var;
 
 typedef struct {
@@ -16,6 +24,57 @@ typedef struct {
     int scope_count;
     int label_count;
 } CodegenCtx;
+
+VarType token_type_to_var_type(TokenType token_type) {
+    switch (token_type) {
+        case TOKEN_BYTE:
+            return VAR_TYPE_BYTE;
+        case TOKEN_WORD:
+            return VAR_TYPE_WORD;
+        case TOKEN_LONG:
+            return VAR_TYPE_LONG;
+        case TOKEN_QWORD:
+            return VAR_TYPE_QWORD;
+        default:
+            fprintf(stderr, "Invalid type token\n");
+            exit(EXIT_FAILURE);
+    }
+}
+
+const char* get_mov_suffix(VarType type) {
+    switch (type) {
+        case VAR_TYPE_BYTE:
+            return "b";
+        case VAR_TYPE_WORD:
+            return "w";
+        case VAR_TYPE_LONG:
+            return "l";
+        case VAR_TYPE_QWORD:
+            return "q";
+        default:
+            return "q";
+    }
+}
+
+const char* get_register_for_type(VarType type, const char reg_name) {
+    // reg_name should be 'a', 'b', etc. for rax, rbx
+    static char reg_buf[8];
+    switch (type) {
+        case VAR_TYPE_BYTE:
+            snprintf(reg_buf, sizeof(reg_buf), "%%%cl", reg_name);  // %al, %bl
+            break;
+        case VAR_TYPE_WORD:
+            snprintf(reg_buf, sizeof(reg_buf), "%%%cx", reg_name);  // %ax, %bx
+            break;
+        case VAR_TYPE_LONG:
+            snprintf(reg_buf, sizeof(reg_buf), "%%e%cx", reg_name); // %eax, %ebx
+            break;
+        case VAR_TYPE_QWORD:
+            snprintf(reg_buf, sizeof(reg_buf), "%%r%cx", reg_name); // %rax, %rbx
+            break;
+    }
+    return reg_buf;
+}
 
 int get_var_index(const char *name, CodegenCtx *ctx) {
     for (int i = 0; i < ctx->var_count; i++) {
@@ -189,21 +248,21 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
 
         ctx->stack_size--;
     } 
-    else if (stmt->kind == NODE_STMT_VAR) {
+    else if (stmt->kind == NODE_STMT_ASSIGN) {
         // check if var already exists
-        int var_index = get_var_index(stmt->as.stmt_var->ident.value, ctx);
+        int var_index = get_var_index(stmt->as.stmt_assign->ident.value, ctx);
         if (var_index >= 0) {
-            fprintf(stderr, "Variable \"%s\" already defined\n", stmt->as.stmt_var->ident.value);
+            fprintf(stderr, "Variable \"%s\" already defined\n", stmt->as.stmt_assign->ident.value);
             exit(EXIT_FAILURE);
         }
 
         // push expression result to top of stack
-        gen_expr(stmt->as.stmt_var->expr, ctx);
+        gen_expr(stmt->as.stmt_assign->expr, ctx);
 
         // push new variable to array
         ctx->vars = realloc(ctx->vars, sizeof(Var) * (ctx->var_count + 1));
         Var *new_var = &ctx->vars[ctx->var_count];
-        new_var->name = stmt->as.stmt_var->ident.value;
+        new_var->name = stmt->as.stmt_assign->ident.value;
         new_var->stack_loc = ctx->stack_size;
         ctx->var_count++;
     } 

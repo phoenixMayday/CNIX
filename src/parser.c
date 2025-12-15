@@ -85,7 +85,7 @@ typedef struct {
 // Statements
 typedef enum {
     NODE_STMT_EXIT,
-    NODE_STMT_VAR,
+    NODE_STMT_ASSIGN,
     NODE_STMT_REASSIGN,
     NODE_STMT_SCOPE,
     NODE_STMT_IF,
@@ -99,12 +99,13 @@ typedef struct {
 typedef struct {
     Token ident;
     NodeExpr *expr;
-} NodeStmtVar;
+    TokenType var_type; // TOKEN_BYTE, TOKEN_WORD, TOKEN_LONG, or TOKEN_QWORD
+} NodeStmtAssignVar;
 
 typedef struct {
     Token ident;
     NodeExpr *expr;
-} NodeStmtReassign;
+} NodeStmtReassignVar;
 
 typedef struct {
     NodeScope *scope;
@@ -127,8 +128,8 @@ typedef struct NodeStmt {
     NodeStmtKind kind;
     union {
         NodeStmtExit *stmt_exit;
-        NodeStmtVar *stmt_var;
-        NodeStmtReassign *stmt_reassign;
+        NodeStmtAssignVar *stmt_assign;
+        NodeStmtReassignVar *stmt_reassign;
         NodeStmtScope *stmt_scope;
         NodeStmtIf *stmt_if;
         NodeStmtFor *stmt_for;
@@ -311,8 +312,12 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         return stmt_base;
     } 
     
-    if (current->type == TOKEN_VAR) {
+    if (current->type == TOKEN_BYTE || current->type == TOKEN_WORD ||
+        current->type == TOKEN_LONG || current->type == TOKEN_QWORD) {
+        
+        TokenType var_type = current->type;
         ctx->current_pos++;
+        
         Token ident_token = ctx->tokens[ctx->current_pos];
 
         // expect identifier
@@ -327,14 +332,14 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         // expect semicolon
         expect_token(TOKEN_SEMI, ctx);
 
-        NodeStmtVar *stmt_var = malloc(sizeof(NodeStmtVar));
-        stmt_var->ident = ident_token;
-        stmt_var->expr = expr;
+        NodeStmtAssignVar *stmt_assign = malloc(sizeof(NodeStmtAssignVar));
+        stmt_assign->ident = ident_token;
+        stmt_assign->expr = expr;
+        stmt_assign->var_type = var_type;
 
         NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
-        stmt_base->kind = NODE_STMT_VAR;
-        stmt_base->as.stmt_var = stmt_var;
-
+        stmt_base->kind = NODE_STMT_ASSIGN;
+        stmt_base->as.stmt_assign = stmt_assign;
         return stmt_base;
     } 
     
@@ -351,7 +356,7 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         // expect semicolon
         expect_token(TOKEN_SEMI, ctx);
 
-        NodeStmtReassign *stmt_reassign = malloc(sizeof(NodeStmtReassign));
+        NodeStmtReassignVar *stmt_reassign = malloc(sizeof(NodeStmtReassignVar));
         stmt_reassign->ident = ident_token;
         stmt_reassign->expr = expr;
 

@@ -11,7 +11,6 @@ typedef enum {
     TOKEN_MINUS,
     TOKEN_ASTERISK,
     TOKEN_FSLASH,
-    TOKEN_VAR,
     TOKEN_EQUALS,
     TOKEN_IDENT,
     TOKEN_OPEN_PAREN,
@@ -27,7 +26,11 @@ typedef enum {
     TOKEN_DOUBLE_EQUALS,
     TOKEN_AMPERSAND,
     TOKEN_PIPE,
-    TOKEN_FOR
+    TOKEN_FOR,
+    TOKEN_BYTE,
+    TOKEN_WORD,
+    TOKEN_LONG,
+    TOKEN_QWORD
 } TokenType;
 
 static int get_precedence(int token_type) {
@@ -92,9 +95,6 @@ Token *tokenise(const char *str, int *out_count) {
             if (strcmp(buf, "exit") == 0) {
                 push_token(&tokens, &count, TOKEN_EXIT, NULL);
                 free(buf);
-            } else if (strcmp(buf, "var") == 0) {
-                push_token(&tokens, &count, TOKEN_VAR, NULL);
-                free(buf);
             } else if (strcmp(buf, "if") == 0) {
                 push_token(&tokens, &count, TOKEN_IF, NULL);
                 free(buf);
@@ -103,6 +103,18 @@ Token *tokenise(const char *str, int *out_count) {
                 free(buf);
             } else if (strcmp(buf, "for") == 0) {
                 push_token(&tokens, &count, TOKEN_FOR, NULL);
+                free(buf);
+            } else if (strcmp(buf, "byte") == 0) {
+                push_token(&tokens, &count, TOKEN_BYTE, NULL);
+                free(buf);
+            } else if (strcmp(buf, "word") == 0) {
+                push_token(&tokens, &count, TOKEN_WORD, NULL);
+                free(buf);
+            } else if (strcmp(buf, "long") == 0) {
+                push_token(&tokens, &count, TOKEN_LONG, NULL);
+                free(buf);
+            } else if (strcmp(buf, "qword") == 0) {
+                push_token(&tokens, &count, TOKEN_QWORD, NULL);
                 free(buf);
             } else {
                 push_token(&tokens, &count, TOKEN_IDENT, buf);

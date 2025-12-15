@@ -42,7 +42,6 @@ int main(int argc, char *argv[]) {
             tokens[i].type == TOKEN_MINUS ? "MINUS" :
             tokens[i].type == TOKEN_ASTERISK ? "MUL" :
             tokens[i].type == TOKEN_FSLASH ? "DIV" :
-            tokens[i].type == TOKEN_VAR ? "VAR" :
             tokens[i].type == TOKEN_EQUALS ? "EQUALS" :
             tokens[i].type == TOKEN_IDENT ? "IDENT" :
             tokens[i].type == TOKEN_OPEN_PAREN ? "OPEN_PAREN" :
@@ -59,6 +58,10 @@ int main(int argc, char *argv[]) {
             tokens[i].type == TOKEN_AMPERSAND ? "AMPERSAND" :
             tokens[i].type == TOKEN_PIPE ? "PIPE" :
             tokens[i].type == TOKEN_FOR ? "FOR" :
+            tokens[i].type == TOKEN_BYTE ? "BYTE" :
+            tokens[i].type == TOKEN_WORD ? "WORD" :
+            tokens[i].type == TOKEN_LONG ? "LONG" :
+            tokens[i].type == TOKEN_QWORD ? "QWORD" :
             "UNKNOWN"
         );
     }
