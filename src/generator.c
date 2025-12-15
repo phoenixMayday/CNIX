@@ -197,9 +197,12 @@ void gen_expr(NodeExpr *expr, CodegenCtx *ctx) {
     } else if (expr->kind == NODE_EXPR_SUB) {
         gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    subq %rbx, %rax\n", ctx);
     } else if (expr->kind == NODE_EXPR_MUL) {
+        // note: returns 128 bit result in rdx:rax, but we only care about lower 64 bits in rax
         gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    mulq %rbx\n", ctx);
     } else if (expr->kind == NODE_EXPR_DIV) {
-        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    divq %rbx\n", ctx);
+        // clear rdx (remainder) before div
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    xorq %rdx, %rdx\n"
+                                                            "    divq %rbx\n", ctx);
     } else if (expr->kind == NODE_EXPR_GTE) {
         gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    setge %al\n", ctx);
     } else if (expr->kind == NODE_EXPR_LTE) {
