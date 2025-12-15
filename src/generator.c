@@ -3,16 +3,16 @@
 #include "parser.c"
 
 typedef enum {
-    VAR_TYPE_BYTE = 1,  // 1 byte
-    VAR_TYPE_WORD = 2,  // 2 bytes
-    VAR_TYPE_LONG = 4,  // 4 bytes
-    VAR_TYPE_QWORD = 8  // 8 bytes
-} VarType;
+    BYTE = 1,  // 1 byte
+    WORD = 2,  // 2 bytes
+    LONG = 4,  // 4 bytes
+    QWORD = 8  // 8 bytes
+} MemWidth;
 
 typedef struct {
     char *name;
     size_t stack_loc;
-    VarType type;
+    MemWidth width;
 } Var;
 
 typedef struct {
@@ -25,51 +25,51 @@ typedef struct {
     int label_count;
 } CodegenCtx;
 
-VarType token_type_to_var_type(TokenType token_type) {
+MemWidth token_type_to_mem_width(TokenType token_type) {
     switch (token_type) {
         case TOKEN_BYTE:
-            return VAR_TYPE_BYTE;
+            return BYTE;
         case TOKEN_WORD:
-            return VAR_TYPE_WORD;
+            return WORD;
         case TOKEN_LONG:
-            return VAR_TYPE_LONG;
+            return LONG;
         case TOKEN_QWORD:
-            return VAR_TYPE_QWORD;
+            return QWORD;
         default:
             fprintf(stderr, "Invalid type token\n");
             exit(EXIT_FAILURE);
     }
 }
 
-const char* get_mov_suffix(VarType type) {
-    switch (type) {
-        case VAR_TYPE_BYTE:
+const char* get_mov_suffix(MemWidth width) {
+    switch (width) {
+        case BYTE:
             return "b";
-        case VAR_TYPE_WORD:
+        case WORD:
             return "w";
-        case VAR_TYPE_LONG:
+        case LONG:
             return "l";
-        case VAR_TYPE_QWORD:
+        case QWORD:
             return "q";
         default:
             return "q";
     }
 }
 
-const char* get_register_for_type(VarType type, const char reg_name) {
+const char* get_register_for_type(MemWidth width, const char reg_name) {
     // reg_name should be 'a', 'b', etc. for rax, rbx
     static char reg_buf[8];
-    switch (type) {
-        case VAR_TYPE_BYTE:
+    switch (width) {
+        case BYTE:
             snprintf(reg_buf, sizeof(reg_buf), "%%%cl", reg_name);  // %al, %bl
             break;
-        case VAR_TYPE_WORD:
+        case WORD:
             snprintf(reg_buf, sizeof(reg_buf), "%%%cx", reg_name);  // %ax, %bx
             break;
-        case VAR_TYPE_LONG:
+        case LONG:
             snprintf(reg_buf, sizeof(reg_buf), "%%e%cx", reg_name); // %eax, %ebx
             break;
-        case VAR_TYPE_QWORD:
+        case QWORD:
             snprintf(reg_buf, sizeof(reg_buf), "%%r%cx", reg_name); // %rax, %rbx
             break;
     }
@@ -118,7 +118,7 @@ static void gen_binary_op(NodeExpr *lhs, NodeExpr *rhs, const char *op_asm, Code
         "%s"
         "    pushq %%rax\n",
         op_asm);
-    ctx->stack_size--;
+    ctx->stack_size -= QWORD;
 }
 
 // helper function for comparison expressions
@@ -133,12 +133,12 @@ static void gen_comparison_op(NodeExpr *lhs, NodeExpr *rhs, const char *op_asm, 
         "    movzbq %%al, %%rax\n"
         "    pushq %%rax\n",
         op_asm);
-    ctx->stack_size--;
+    ctx->stack_size -= QWORD;
 }
 
 void gen_term(NodeTerm *term, CodegenCtx *ctx) {
     if (term->kind == NODE_TERM_INT_LIT) {
-        ctx->stack_size++;
+        ctx->stack_size += QWORD;
         
         appendf(&ctx->output,
             "    movq $%s, %%rax\n"
@@ -156,9 +156,9 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         // push copy of variable's value to top of stack
         appendf(&ctx->output,
             "    pushq %zu(%%rsp)\n",
-            (ctx->stack_size - ctx->vars[var_index].stack_loc) * 8);
+            (ctx->stack_size - ctx->vars[var_index].stack_loc));
 
-        ctx->stack_size++;
+        ctx->stack_size += QWORD;
     } 
     else if (term->kind == NODE_TERM_PAREN) {
         gen_expr(term->as.paren->expr, ctx);
@@ -246,7 +246,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             "    popq %%rdi\n"
             "    syscall\n");
 
-        ctx->stack_size--;
+        ctx->stack_size -= QWORD;
     } 
     else if (stmt->kind == NODE_STMT_ASSIGN) {
         // check if var already exists
@@ -281,10 +281,10 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         appendf(&ctx->output,
             "    popq %%rax\n"
             "    movq %%rax, %zu(%%rsp)\n",
-            // subtract 1 because we popped
-            (ctx->stack_size - 1 - ctx->vars[var_index].stack_loc) * 8);
+            // subtract a QWORD because we popped
+            (ctx->stack_size - QWORD - ctx->vars[var_index].stack_loc));
 
-        ctx->stack_size--;
+        ctx->stack_size -= QWORD;
     }
     else if (stmt->kind == NODE_STMT_SCOPE) {
         gen_scope(stmt->as.stmt_scope->scope, ctx);
@@ -299,7 +299,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             "    cmpq $0, %%rax\n"
             "    je .Lend_if_%d\n",
             if_end_label_id);
-        ctx->stack_size--;
+        ctx->stack_size -= QWORD;
 
         gen_scope(stmt->as.stmt_if->scope, ctx);
 
@@ -349,7 +349,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
                 "    cmpq $0, %%rax\n"
                 "    je .Lend_for_%d\n",
                 for_end_label_id);
-            ctx->stack_size--;
+            ctx->stack_size -= QWORD;
         }
 
         // loop body
