@@ -56,7 +56,7 @@ const char* get_mov_suffix(MemWidth width) {
     }
 }
 
-const char* get_register_for_type(MemWidth width, const char reg_name) {
+const char* get_register_for_width(MemWidth width, const char reg_name) {
     // reg_name should be 'a', 'b', etc. for rax, rbx
     static char reg_buf[8];
     switch (width) {
@@ -153,10 +153,29 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             exit(EXIT_FAILURE);
         }
 
-        // push copy of variable's value to top of stack
-        appendf(&ctx->output,
-            "    pushq %zu(%%rsp)\n",
-            (ctx->stack_size - ctx->vars[var_index].stack_loc));
+        // read variable value and push as qword (with zero-extension)
+        MemWidth var_width = ctx->vars[var_index].width;
+        size_t offset = ctx->stack_size - ctx->vars[var_index].stack_loc;
+        
+        if (var_width == QWORD) {
+            // can push directly
+            appendf(&ctx->output,
+                "    pushq %zu(%%rsp)\n",
+                offset);
+        } else if (var_width == LONG) {
+            // movl automatically zero-extends to 64-bit because of legcacy x86 bs
+            appendf(&ctx->output,
+                "    movl %zu(%%rsp), %%eax\n"
+                "    pushq %%rax\n",
+                offset);
+        } else {
+            // load byte/word with zero-extension, then push
+            appendf(&ctx->output,
+                "    movz%s %zu(%%rsp), %%rax\n"
+                "    pushq %%rax\n",
+                get_mov_suffix(var_width),
+                offset);
+        }
 
         ctx->stack_size += QWORD;
     } 
@@ -224,13 +243,19 @@ void gen_scope(NodeScope *scope, CodegenCtx *ctx) {
         return;
     }
 
+    // calculate total bytes to pop based on variable widths
+    size_t bytes_to_pop = 0;
+    for (int i = prev_var_count; i < ctx->var_count; i++) {
+        bytes_to_pop += ctx->vars[i].width;
+    }
+
     // adjust stack pointer
     appendf(&ctx->output,
         "    add $%zu, %%rsp\n",
-        vars_to_pop * 8);
+        bytes_to_pop);
 
     // update context
-    ctx->stack_size -= vars_to_pop;
+    ctx->stack_size -= bytes_to_pop;
     ctx->var_count = prev_var_count;
     ctx->vars = realloc(ctx->vars, sizeof(Var) * ctx->var_count);
 }
@@ -256,13 +281,29 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             exit(EXIT_FAILURE);
         }
 
-        // push expression result to top of stack
+        // push expression result (qword) to top of stack
         gen_expr(stmt->as.stmt_assign->expr, ctx);
+
+        // get variable width
+        MemWidth var_width = token_type_to_mem_width(stmt->as.stmt_assign->var_type);
+
+        // pop expression result and allocate exact space for variable
+        appendf(&ctx->output,
+            "    popq %%rax\n"
+            "    sub $%d, %%rsp\n"
+            "    mov%s %s, (%%rsp)\n",
+            var_width,
+            get_mov_suffix(var_width),
+            get_register_for_width(var_width, 'a'));
+
+        // update stack size: popped 8 bytes, allocated var_width bytes
+        ctx->stack_size = ctx->stack_size - QWORD + var_width;
 
         // push new variable to array
         ctx->vars = realloc(ctx->vars, sizeof(Var) * (ctx->var_count + 1));
         Var *new_var = &ctx->vars[ctx->var_count];
         new_var->name = stmt->as.stmt_assign->ident.value;
+        new_var->width = var_width;
         new_var->stack_loc = ctx->stack_size;
         ctx->var_count++;
     } 
@@ -278,11 +319,15 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         gen_expr(stmt->as.stmt_reassign->expr, ctx);
 
         // pop expression result into variable's stack location
+        MemWidth var_width = ctx->vars[var_index].width;
+        size_t offset = ctx->stack_size - QWORD - ctx->vars[var_index].stack_loc;
+        
         appendf(&ctx->output,
             "    popq %%rax\n"
-            "    movq %%rax, %zu(%%rsp)\n",
-            // subtract a QWORD because we popped
-            (ctx->stack_size - QWORD - ctx->vars[var_index].stack_loc));
+            "    mov%s %s, %zu(%%rsp)\n",
+            get_mov_suffix(var_width),
+            get_register_for_width(var_width, 'a'),
+            offset);
 
         ctx->stack_size -= QWORD;
     }
