@@ -39,7 +39,11 @@ typedef enum {
     TOKEN_UINT16,
     TOKEN_UINT32,
     TOKEN_UINT64,
-    TOKEN_CHAR
+    TOKEN_CHAR,
+    TOKEN_ALLOC,
+    TOKEN_FREE,
+    TOKEN_OPEN_SQUARE,
+    TOKEN_CLOSE_SQUARE
 } TokenType;
 
 static int get_precedence(int token_type) {
@@ -153,6 +157,12 @@ Token *tokenise(const char *str, int *out_count) {
             } else if (strcmp(buf, "char") == 0) {
                 push_token(&tokens, &count, TOKEN_CHAR, NULL);
                 free(buf);
+            } else if (strcmp(buf, "alloc") == 0) {
+                push_token(&tokens, &count, TOKEN_ALLOC, NULL);
+                free(buf);
+            } else if (strcmp(buf, "free") == 0) {
+                push_token(&tokens, &count, TOKEN_FREE, NULL);
+                free(buf);
             } else {
                 push_token(&tokens, &count, TOKEN_IDENT, buf);
             }
@@ -182,6 +192,13 @@ Token *tokenise(const char *str, int *out_count) {
             push_token(&tokens, &count, TOKEN_MINUS, NULL);
         } else if (c == '*') {
             push_token(&tokens, &count, TOKEN_ASTERISK, NULL);
+        } else if (c == '/' && str[i + 1] == '/') {
+            // comment: skip until end of line
+            i += 2;
+            while (i < strlen(str) && str[i] != '\n') {
+                i++;
+            }
+            continue;
         } else if (c == '/') {
             push_token(&tokens, &count, TOKEN_FSLASH, NULL);
         } else if (c == '=' && str[i + 1] == '=') {
@@ -211,6 +228,10 @@ Token *tokenise(const char *str, int *out_count) {
             push_token(&tokens, &count, TOKEN_AMPERSAND, NULL);
         } else if (c == '|') {
             push_token(&tokens, &count, TOKEN_PIPE, NULL);
+        } else if (c == '[') {
+            push_token(&tokens, &count, TOKEN_OPEN_SQUARE, NULL);
+        } else if (c == ']') {
+            push_token(&tokens, &count, TOKEN_CLOSE_SQUARE, NULL);
         }
         else if (isspace(c)) {
             continue;

@@ -23,7 +23,12 @@ NodeExpr *parse_expr(int min_prec, ParserCtx *ctx);
 typedef enum {
     NODE_TERM_INT_LIT,
     NODE_TERM_IDENT,
-    NODE_TERM_PAREN
+    NODE_TERM_PAREN,
+    NODE_TERM_ADDR_OF,
+    NODE_TERM_DEREF,
+    NODE_TERM_ARRAY_INDEX,
+    NODE_TERM_ALLOC,
+    NODE_TERM_FREE
 } NodeTermKind;
 
 typedef struct {
@@ -39,11 +44,37 @@ typedef struct{
 } NodeTermParen;
 
 typedef struct {
+    Token ident;
+} NodeTermAddrOf;
+
+typedef struct {
+    NodeExpr *expr;
+} NodeTermDeref;
+
+typedef struct {
+    Token ident;
+    NodeExpr *index;
+} NodeTermArrayIndex;
+
+typedef struct {
+    NodeExpr *size;
+} NodeTermAlloc;
+
+typedef struct {
+    NodeExpr *ptr;
+} NodeTermFree;
+
+typedef struct {
     NodeTermKind kind;
     union {
         NodeTermIntLit *int_lit;
         NodeTermIdent *ident;
         NodeTermParen *paren;
+        NodeTermAddrOf *addr_of;
+        NodeTermDeref *deref;
+        NodeTermArrayIndex *array_index;
+        NodeTermAlloc *alloc;
+        NodeTermFree *free_ptr;
     } as;
 } NodeTerm;
 
@@ -87,6 +118,7 @@ typedef enum {
     NODE_STMT_EXIT,
     NODE_STMT_ASSIGN,
     NODE_STMT_REASSIGN,
+    NODE_STMT_ASSIGN_ARRAY,
     NODE_STMT_SCOPE,
     NODE_STMT_IF,
     NODE_STMT_FOR
@@ -100,12 +132,19 @@ typedef struct {
     Token ident;
     NodeExpr *expr;
     TokenType var_type;
+    int is_pointer;
 } NodeStmtAssignVar;
 
 typedef struct {
     Token ident;
     NodeExpr *expr;
 } NodeStmtReassignVar;
+
+typedef struct {
+    Token ident;
+    NodeExpr *index;
+    NodeExpr *expr;
+} NodeStmtAssignArray;
 
 typedef struct {
     NodeScope *scope;
@@ -130,6 +169,7 @@ typedef struct NodeStmt {
         NodeStmtExit *stmt_exit;
         NodeStmtAssignVar *stmt_assign;
         NodeStmtReassignVar *stmt_reassign;
+        NodeStmtAssignArray *stmt_assign_array;
         NodeStmtScope *stmt_scope;
         NodeStmtIf *stmt_if;
         NodeStmtFor *stmt_for;
@@ -155,17 +195,108 @@ NodeTerm *parse_term(ParserCtx *ctx) {
 
         ctx->current_pos++;
         return term_base;
-    } else if (peek->type == TOKEN_IDENT) {
-        NodeTermIdent *ident_node = malloc(sizeof(NodeTermIdent));
-        ident_node->ident = *peek;
+    } 
+    else if (peek->type == TOKEN_AMPERSAND) {
+        // address-of operator: &variable
+        ctx->current_pos++;
+        
+        if (ctx->current_pos >= ctx->token_count ||
+            ctx->tokens[ctx->current_pos].type != TOKEN_IDENT) {
+            fprintf(stderr, "Address-of operator requires an identifier\n");
+            exit(EXIT_FAILURE);
+        }
+
+        Token ident_token = ctx->tokens[ctx->current_pos];
+        ctx->current_pos++; // consume identifier
+        
+        NodeTermAddrOf *addr_of_node = malloc(sizeof(NodeTermAddrOf));
+        addr_of_node->ident = ident_token;
         
         NodeTerm *term_base = malloc(sizeof(NodeTerm));
-        term_base->kind = NODE_TERM_IDENT;
-        term_base->as.ident = ident_node;
-
-        ctx->current_pos++;
+        term_base->kind = NODE_TERM_ADDR_OF;
+        term_base->as.addr_of = addr_of_node;
+        
         return term_base;
-    } else if (peek->type == TOKEN_OPEN_PAREN) {
+    }
+    else if (peek->type == TOKEN_ASTERISK) {
+        // dereference operator: *expr
+        ctx->current_pos++;
+        
+        NodeTermDeref *deref_node = malloc(sizeof(NodeTermDeref));
+        deref_node->expr = parse_expr(0, ctx);
+        
+        NodeTerm *term_base = malloc(sizeof(NodeTerm));
+        term_base->kind = NODE_TERM_DEREF;
+        term_base->as.deref = deref_node;
+        
+        return term_base;
+    }
+    else if (peek->type == TOKEN_ALLOC) {
+        // alloc(size)
+        ctx->current_pos++;
+
+        expect_token(TOKEN_OPEN_PAREN, ctx);
+        
+        NodeTermAlloc *alloc_node = malloc(sizeof(NodeTermAlloc));
+        alloc_node->size = parse_expr(0, ctx);
+        
+        expect_token(TOKEN_CLOSE_PAREN, ctx);
+        
+        NodeTerm *term_base = malloc(sizeof(NodeTerm));
+        term_base->kind = NODE_TERM_ALLOC;
+        term_base->as.alloc = alloc_node;
+        
+        return term_base;
+    }
+    else if (peek->type == TOKEN_FREE) {
+        // free(ptr)
+        ctx->current_pos++;
+        expect_token(TOKEN_OPEN_PAREN, ctx);
+        
+        NodeTermFree *free_node = malloc(sizeof(NodeTermFree));
+        free_node->ptr = parse_expr(0, ctx);
+        
+        expect_token(TOKEN_CLOSE_PAREN, ctx);
+        
+        NodeTerm *term_base = malloc(sizeof(NodeTerm));
+        term_base->kind = NODE_TERM_FREE;
+        term_base->as.free_ptr = free_node;
+        
+        return term_base;
+    }
+    else if (peek->type == TOKEN_IDENT) {
+        Token ident_token = *peek;
+        ctx->current_pos++;
+        
+        // check indexing array: ident[expr]
+        if (ctx->current_pos < ctx->token_count && 
+            ctx->tokens[ctx->current_pos].type == TOKEN_OPEN_SQUARE) {
+            ctx->current_pos++;
+            
+            NodeTermArrayIndex *array_index_node = malloc(sizeof(NodeTermArrayIndex));
+            array_index_node->ident = ident_token;
+            array_index_node->index = parse_expr(0, ctx);
+            
+            expect_token(TOKEN_CLOSE_SQUARE, ctx);
+            
+            NodeTerm *term_base = malloc(sizeof(NodeTerm));
+            term_base->kind = NODE_TERM_ARRAY_INDEX;
+            term_base->as.array_index = array_index_node;
+            
+            return term_base;
+        } else {
+            // regular identifier
+            NodeTermIdent *ident_node = malloc(sizeof(NodeTermIdent));
+            ident_node->ident = ident_token;
+            
+            NodeTerm *term_base = malloc(sizeof(NodeTerm));
+            term_base->kind = NODE_TERM_IDENT;
+            term_base->as.ident = ident_node;
+            
+            return term_base;
+        }
+    } 
+    else if (peek->type == TOKEN_OPEN_PAREN) {
         ctx->current_pos++; // consume '('
 
         // expect expression
@@ -323,6 +454,14 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         TokenType var_type = current->type;
         ctx->current_pos++;
         
+        // check if pointer type
+        int is_pointer = 0;
+        if (ctx->current_pos < ctx->token_count && 
+            ctx->tokens[ctx->current_pos].type == TOKEN_ASTERISK) {
+            is_pointer = 1;
+            ctx->current_pos++; // consume '*'
+        }
+        
         Token ident_token = ctx->tokens[ctx->current_pos];
 
         // expect identifier
@@ -341,6 +480,7 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         stmt_assign->ident = ident_token;
         stmt_assign->expr = expr;
         stmt_assign->var_type = var_type;
+        stmt_assign->is_pointer = is_pointer;
 
         NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
         stmt_base->kind = NODE_STMT_ASSIGN;
@@ -352,7 +492,33 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         Token ident_token = *current;
         ctx->current_pos++;
 
-        // expect equals
+        // check if array assignment: arr[index] = expr
+        if (ctx->current_pos < ctx->token_count &&
+            ctx->tokens[ctx->current_pos].type == TOKEN_OPEN_SQUARE) {
+            ctx->current_pos++; // consume '['
+            
+            NodeExpr *index_expr = parse_expr(0, ctx);
+            
+            expect_token(TOKEN_CLOSE_SQUARE, ctx);
+            expect_token(TOKEN_EQUALS, ctx);
+            
+            NodeExpr *value_expr = parse_expr(0, ctx);
+            
+            expect_token(TOKEN_SEMI, ctx);
+            
+            NodeStmtAssignArray *stmt_assign_array = malloc(sizeof(NodeStmtAssignArray));
+            stmt_assign_array->ident = ident_token;
+            stmt_assign_array->index = index_expr;
+            stmt_assign_array->expr = value_expr;
+            
+            NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
+            stmt_base->kind = NODE_STMT_ASSIGN_ARRAY;
+            stmt_base->as.stmt_assign_array = stmt_assign_array;
+            
+            return stmt_base;
+        }
+
+        // regular reassignment
         expect_token(TOKEN_EQUALS, ctx);
 
         // expect expression

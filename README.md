@@ -23,44 +23,60 @@ make run FILE=./examples/example.cnix
 ## Grammar
 
 ```
+[type] = byte | word | long | qword
+       | int8 | int16 | int32 | int64
+       | uint8 | uint16 | uint32 | uint64
+       | char
+
+[pointer-type] = [type] *
+
+[var-type] = [type]
+           | [pointer-type]
+
 [term] = integer_literal
-       | indentifer
+       | identifier
+       | identifier[[expression]]        // array indexing
        | ([expression])
+       | &identifier                     // address-of
+       | *[expression]                   // dereference
+       | alloc([expression])             // heap allocation
+       | free([expression])              // heap deallocation
      
 [expression] = [expression] + [expression]
-		     | [expression] - [expression]
-		     | [expression] * [expression]
-		     | [expression] / [expression]
-		     | [expression] > [expression]
-		     | [expression] >= [expression]
-		     | [expression] < [expression]
-		     | [expression] <= [expression]
-		     | [expression] == [expression]
-		     | [expression] & [expression]
-		     | [expression] | [expression]
-		     | [term]
+             | [expression] - [expression]
+             | [expression] * [expression]
+             | [expression] / [expression]
+             | [expression] > [expression]
+             | [expression] >= [expression]
+             | [expression] < [expression]
+             | [expression] <= [expression]
+             | [expression] == [expression]
+             | [expression] & [expression]
+             | [expression] | [expression]
+             | [term]
 
 [statement] = exit([expression]);
-			| var identifier = [expression];
-			| identifier = [expression];
-			| [scope]
-			| if ([expression]) [scope] [else]
-			| for ([for-init]; [for-condition]; [for-increment];)
-			
+            | [var-type] identifier = [expression];
+            | identifier = [expression];
+            | identifier[[expression]] = [expression];  // array assignment
+            | [scope]
+            | if ([expression]) [scope] [else]
+            | for ([for-init]; [for-condition]; [for-increment];)
+            
 [for-init] = [statement]
-		   | ε
-		   
+           | ε
+           
 [for-condition] = [expression]
-		        | ε
+                | ε
  
 [for-increment] = [statement]
-		        | ε
+                | ε
 
 [scope] = { [statement]* }
         | [statement]
 
 [else] = else [scope]
-	   | ε
+       | ε
 
 [program] = [statement]*
 ```

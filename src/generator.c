@@ -12,6 +12,8 @@ typedef enum {
 typedef struct {
     MemWidth size;
     int is_signed;
+    int is_pointer;
+    MemWidth pointee_size;
 } VarType;
 
 typedef struct {
@@ -30,50 +32,66 @@ typedef struct {
     int label_count;
 } CodegenCtx;
 
-VarType token_type_to_var_type(TokenType token_type) {
+VarType token_type_to_var_type(TokenType token_type, int is_pointer) {
     VarType type;
+    type.is_pointer = is_pointer;
+    
+    MemWidth base_size;
+    int base_signed;
+    
     switch (token_type) {
         case TOKEN_BYTE:
         case TOKEN_UINT8:
         case TOKEN_CHAR:
-            type.size = BYTE;
-            type.is_signed = 0;
+            base_size = BYTE;
+            base_signed = 0;
             break;
         case TOKEN_WORD:
         case TOKEN_UINT16:
-            type.size = WORD;
-            type.is_signed = 0;
+            base_size = WORD;
+            base_signed = 0;
             break;
         case TOKEN_LONG:
         case TOKEN_UINT32:
-            type.size = LONG;
-            type.is_signed = 0;
+            base_size = LONG;
+            base_signed = 0;
             break;
         case TOKEN_QWORD:
         case TOKEN_UINT64:
-            type.size = QWORD;
-            type.is_signed = 0;
+            base_size = QWORD;
+            base_signed = 0;
             break;
         case TOKEN_INT8:
-            type.size = BYTE;
-            type.is_signed = 1;
+            base_size = BYTE;
+            base_signed = 1;
             break;
         case TOKEN_INT16:
-            type.size = WORD;
-            type.is_signed = 1;
+            base_size = WORD;
+            base_signed = 1;
             break;
         case TOKEN_INT32:
-            type.size = LONG;
-            type.is_signed = 1;
+            base_size = LONG;
+            base_signed = 1;
             break;
         case TOKEN_INT64:
-            type.size = QWORD;
-            type.is_signed = 1;
+            base_size = QWORD;
+            base_signed = 1;
             break;
         default:
             fprintf(stderr, "Invalid type token\n");
             exit(EXIT_FAILURE);
     }
+    
+    if (is_pointer) {
+        type.size = QWORD;             // pointers are always 8 bytes
+        type.is_signed = 0;
+        type.pointee_size = base_size; // but remember what they point to
+    } else {
+        type.size = base_size;
+        type.is_signed = base_signed;
+        type.pointee_size = 0;         // non-pointers don't have a pointee
+    }
+    
     return type;
 }
 
@@ -237,6 +255,119 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
     else if (term->kind == NODE_TERM_PAREN) {
         gen_expr(term->as.paren->expr, ctx);
     }
+    else if (term->kind == NODE_TERM_ADDR_OF) {
+        int var_index = get_var_index(term->as.addr_of->ident.value, ctx);
+        if (var_index == -1) {
+            fprintf(stderr, "Undefined variable \"%s\"\n", term->as.addr_of->ident.value);
+            exit(EXIT_FAILURE);
+        }
+        
+        size_t offset = ctx->stack_size - ctx->vars[var_index].stack_loc;
+        
+        // get address of a variable and push pointer to stack
+        appendf(&ctx->output,
+            "    leaq %zu(%%rsp), %%rax\n"
+            "    pushq %%rax\n",
+            offset);
+        
+        ctx->stack_size += QWORD;
+    }
+    else if (term->kind == NODE_TERM_DEREF) {
+        gen_expr(term->as.deref->expr, ctx);
+        
+        // pop pointer address from stack, push value at that address
+        appendf(&ctx->output,
+            "    popq %%rax\n"
+            "    movq (%%rax), %%rbx\n"
+            "    pushq %%rbx\n");
+    }
+    else if (term->kind == NODE_TERM_ARRAY_INDEX) {
+        // array indexing: arr[index]
+        int var_index = get_var_index(term->as.array_index->ident.value, ctx);
+        if (var_index == -1) {
+            fprintf(stderr, "Undefined variable \"%s\"\n", term->as.array_index->ident.value);
+            exit(EXIT_FAILURE);
+        }
+        
+        VarType var_type = ctx->vars[var_index].type;
+        if (!var_type.is_pointer) {
+            fprintf(stderr, "Cannot index non-pointer variable \"%s\"\n", 
+                    term->as.array_index->ident.value);
+            exit(EXIT_FAILURE);
+        }
+        
+        MemWidth element_size = var_type.pointee_size;
+        
+        // push pointer value to stack
+        size_t offset = ctx->stack_size - ctx->vars[var_index].stack_loc;
+        appendf(&ctx->output,
+            "    pushq %zu(%%rsp)\n",
+            offset);
+        ctx->stack_size += QWORD;
+        
+        // generate index expression
+        gen_expr(term->as.array_index->index, ctx);
+        
+        // pop index and pointer, calculate address and load value
+        if (element_size == QWORD || element_size == LONG) {
+            // qwords and longs can be loaded directly
+            appendf(&ctx->output,
+                "    popq %%rbx\n"              // index
+                "    popq %%rax\n"              // pointer
+                "    imulq $%d, %%rbx\n"        // multiply by element size
+                "    addq %%rbx, %%rax\n"       // add to pointer
+                "    mov%s (%%rax), %s\n"       // load value (into rcx or ecx)
+                "    pushq %%rcx\n",            // push result
+                element_size,
+                get_mov_suffix(element_size),
+                get_register_for_width(element_size, 'c'));
+        } else {
+            // byte and word need explicit zero-extension
+            appendf(&ctx->output,
+                "    popq %%rbx\n"              // index
+                "    popq %%rax\n"              // pointer
+                "    imulq $%d, %%rbx\n"        // multiply by element size
+                "    addq %%rbx, %%rax\n"       // add to pointer
+                "    movz%sq (%%rax), %%rcx\n"  // load value with zero-extension
+                "    pushq %%rcx\n",            // push result
+                element_size,
+                get_mov_suffix(element_size));
+        }
+        
+        ctx->stack_size -= QWORD;
+    }
+    else if (term->kind == NODE_TERM_ALLOC) {
+        // allocate memory using mmap syscall
+        /*
+        mmap(
+            NULL,                      // let kernel choose address
+            size,                      // bytes to allocate
+            PROT_READ|PROT_WRITE,      // read/write (1|2 = 3)
+            MAP_PRIVATE|MAP_ANONYMOUS, // private (not shared) and anonymous(no file, just ram) (2|32 = 34)
+            -1,                        // file descriptor (-1 because anonymous)
+            0                          // file offset (none because anonymous)
+        )
+        */
+        
+        gen_expr(term->as.alloc->size, ctx);
+        
+        appendf(&ctx->output,
+            "    popq %%rsi\n"              // size (2nd arg)
+            "    movq $9, %%rax\n"          // mmap syscall number 
+            "    xorq %%rdi, %%rdi\n"       // NULL (1st arg)
+            "    movq $3, %%rdx\n"          // PROT_READ|PROT_WRITE (3rd arg)
+            "    movq $34, %%r10\n"         // MAP_PRIVATE|MAP_ANONYMOUS (4th arg)
+            "    movq $-1, %%r8\n"          // -1 (5th arg)
+            "    xorq %%r9, %%r9\n"         // 0 (6th arg)
+            "    syscall\n"
+            "    pushq %%rax\n");           // push returned pointer
+    }
+    else if (term->kind == NODE_TERM_FREE) {
+        // free memory using munmap syscall
+        // munmap(addr, length) - we need to know length to free
+
+        // TODO
+    }
     else {
         fprintf(stderr, "Unknown term kind in code generation\n");
         exit(EXIT_FAILURE);
@@ -343,7 +474,8 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         gen_expr(stmt->as.stmt_assign->expr, ctx);
 
         // get variable type
-        VarType var_type = token_type_to_var_type(stmt->as.stmt_assign->var_type);
+        VarType var_type = token_type_to_var_type(stmt->as.stmt_assign->var_type, 
+                                                   stmt->as.stmt_assign->is_pointer);
         MemWidth var_width = var_type.size;
 
         // pop expression result and allocate exact space for variable
@@ -389,6 +521,46 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             offset);
 
         ctx->stack_size -= QWORD;
+    }
+    else if (stmt->kind == NODE_STMT_ASSIGN_ARRAY) {
+        int var_index = get_var_index(stmt->as.stmt_assign_array->ident.value, ctx);
+        if (var_index == -1) {
+            fprintf(stderr, "Undefined variable \"%s\"\n", stmt->as.stmt_assign_array->ident.value);
+            exit(EXIT_FAILURE);
+        }
+        
+        VarType var_type = ctx->vars[var_index].type;
+        if (!var_type.is_pointer) {
+            fprintf(stderr, "Cannot index non-pointer variable \"%s\"\n", 
+                    stmt->as.stmt_assign_array->ident.value);
+            exit(EXIT_FAILURE);
+        }
+        
+        MemWidth element_size = var_type.pointee_size;
+        
+        // generate index expression
+        gen_expr(stmt->as.stmt_assign_array->index, ctx);
+        
+        // generate value expression
+        gen_expr(stmt->as.stmt_assign_array->expr, ctx);
+        
+        // load the pointer value
+        size_t offset = ctx->stack_size - ctx->vars[var_index].stack_loc;
+        
+        // pop value and index, load pointer, calc address and store
+        appendf(&ctx->output,
+            "    popq %%rax\n"              // value
+            "    popq %%rbx\n"              // index
+            "    movq %zu(%%rsp), %%rcx\n"  // load pointer
+            "    imulq $%d, %%rbx\n"        // multiply by element size
+            "    addq %%rbx, %%rcx\n"       // add to pointer
+            "    mov%s %s, (%%rcx)\n",      // store value at address
+            offset - 2 * QWORD,
+            element_size,
+            get_mov_suffix(element_size),
+            get_register_for_width(element_size, 'a'));
+        
+        ctx->stack_size -= 2 * QWORD;
     }
     else if (stmt->kind == NODE_STMT_SCOPE) {
         gen_scope(stmt->as.stmt_scope->scope, ctx);
