@@ -62,6 +62,7 @@ typedef struct {
 
 typedef struct {
     NodeExpr *ptr;
+    NodeExpr *size;
 } NodeTermFree;
 
 typedef struct {
@@ -249,12 +250,16 @@ NodeTerm *parse_term(ParserCtx *ctx) {
         return term_base;
     }
     else if (peek->type == TOKEN_FREE) {
-        // free(ptr)
+        // free(ptr, size)
         ctx->current_pos++;
         expect_token(TOKEN_OPEN_PAREN, ctx);
         
         NodeTermFree *free_node = malloc(sizeof(NodeTermFree));
         free_node->ptr = parse_expr(0, ctx);
+        
+        expect_token(TOKEN_COMMA, ctx);
+        
+        free_node->size = parse_expr(0, ctx);
         
         expect_token(TOKEN_CLOSE_PAREN, ctx);
         

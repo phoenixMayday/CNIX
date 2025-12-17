@@ -71,6 +71,11 @@ int main(int argc, char *argv[]) {
             tokens[i].type == TOKEN_UINT32 ? "UINT32" :
             tokens[i].type == TOKEN_UINT64 ? "UINT64" :
             tokens[i].type == TOKEN_CHAR ? "CHAR" :
+            tokens[i].type == TOKEN_ALLOC ? "ALLOC" :
+            tokens[i].type == TOKEN_FREE ? "FREE" :
+            tokens[i].type == TOKEN_OPEN_SQUARE ? "OPEN_SQUARE" :
+            tokens[i].type == TOKEN_CLOSE_SQUARE ? "CLOSE_SQUARE" :
+            tokens[i].type == TOKEN_COMMA ? "COMMA" :
             "UNKNOWN"
         );
     }

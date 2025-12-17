@@ -347,6 +347,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             -1,                        // file descriptor (-1 because anonymous)
             0                          // file offset (none because anonymous)
         )
+        returns pointer to allocated memory, -1 on error
         */
         
         gen_expr(term->as.alloc->size, ctx);
@@ -364,9 +365,24 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
     }
     else if (term->kind == NODE_TERM_FREE) {
         // free memory using munmap syscall
-        // munmap(addr, length) - we need to know length to free
 
-        // TODO
+        /*
+        munmap(
+            addr,    // address to unmap
+            length   // number of bytes to unmap
+        )
+        returns 0 on success, -1 on error
+        */
+        
+        gen_expr(term->as.free_ptr->size, ctx);
+        gen_expr(term->as.free_ptr->ptr, ctx);
+        
+        appendf(&ctx->output,
+            "    popq %%rdi\n"              // addr (1st arg)
+            "    popq %%rsi\n"              // length (2nd arg)
+            "    movq $11, %%rax\n"         // munmap syscall number
+            "    syscall\n"
+            "    pushq %%rax\n");           // push return value
     }
     else {
         fprintf(stderr, "Unknown term kind in code generation\n");
@@ -499,6 +515,18 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         ctx->var_count++;
     } 
     else if (stmt->kind == NODE_STMT_REASSIGN) {
+        // check if "_" (discard identifier)
+        if (strcmp(stmt->as.stmt_reassign->ident.value, "_") == 0) {
+            // generate expression and discard result
+            gen_expr(stmt->as.stmt_reassign->expr, ctx);
+            
+            appendf(&ctx->output,
+                "    addq $8, %%rsp\n");
+            ctx->stack_size -= QWORD;
+
+            return;
+        }
+
         // find variable
         int var_index = get_var_index(stmt->as.stmt_reassign->ident.value, ctx);
         if (var_index == -1) {

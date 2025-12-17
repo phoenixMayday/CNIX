@@ -43,7 +43,8 @@ typedef enum {
     TOKEN_ALLOC,
     TOKEN_FREE,
     TOKEN_OPEN_SQUARE,
-    TOKEN_CLOSE_SQUARE
+    TOKEN_CLOSE_SQUARE,
+    TOKEN_COMMA
 } TokenType;
 
 static int get_precedence(int token_type) {
@@ -96,11 +97,11 @@ Token *tokenise(const char *str, int *out_count) {
     for (size_t i = 0; i < strlen(str); i++) {
         char c = str[i];
         char c_next = str[i + 1];
-        if (isalpha(c)) {
+        if (isalpha(c) || c == '_') {
             int start = i;
             int len = 0;
 
-            while (isalnum(str[i + len]))
+            while (isalnum(str[i + len]) || str[i + len] == '_')
                 len++;
             
             char *buf = copy_lexme(str, start, len);
@@ -232,6 +233,8 @@ Token *tokenise(const char *str, int *out_count) {
             push_token(&tokens, &count, TOKEN_OPEN_SQUARE, NULL);
         } else if (c == ']') {
             push_token(&tokens, &count, TOKEN_CLOSE_SQUARE, NULL);
+        } else if (c == ',') {
+            push_token(&tokens, &count, TOKEN_COMMA, NULL);
         }
         else if (isspace(c)) {
             continue;
