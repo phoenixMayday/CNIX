@@ -383,6 +383,8 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             "    movq $11, %%rax\n"         // munmap syscall number
             "    syscall\n"
             "    pushq %%rax\n");           // push return value
+
+        ctx->stack_size -= QWORD;
     }
     else {
         fprintf(stderr, "Unknown term kind in code generation\n");
