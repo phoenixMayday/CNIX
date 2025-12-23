@@ -10,20 +10,16 @@ typedef enum {
 } MemWidth;
 
 typedef struct {
-    MemWidth size;
-    int is_signed;
-    int is_pointer;
-    MemWidth pointee_size;
-} VarType;
-
-typedef struct {
     char *name;
     size_t stack_loc;
-    VarType type;
+    MemWidth total_size;
+    int is_signed;
+    int is_pointer;
+    MemWidth array_element_size; // 0 if not a pointer
 } Var;
 
 typedef struct {
-    char *output;
+    char *output; 
     Var *vars;
     int var_count;
     size_t stack_size;
@@ -32,10 +28,7 @@ typedef struct {
     int label_count;
 } CodegenCtx;
 
-VarType token_type_to_var_type(TokenType token_type, int is_pointer) {
-    VarType type;
-    type.is_pointer = is_pointer;
-    
+void set_var_type_from_token(Var *var, TokenType token_type, int is_pointer) {
     MemWidth base_size;
     int base_signed;
     
@@ -82,17 +75,16 @@ VarType token_type_to_var_type(TokenType token_type, int is_pointer) {
             exit(EXIT_FAILURE);
     }
     
+    var->is_pointer = is_pointer;
     if (is_pointer) {
-        type.size = QWORD;             // pointers are always 8 bytes
-        type.is_signed = 0;
-        type.pointee_size = base_size; // but remember what they point to
+        var->total_size = QWORD;              // pointers are always 8 bytes
+        var->is_signed = 0;
+        var->array_element_size = base_size;  // remember what they point to
     } else {
-        type.size = base_size;
-        type.is_signed = base_signed;
-        type.pointee_size = 0;         // non-pointers don't have a pointee
+        var->total_size = base_size;
+        var->is_signed = base_signed;
+        var->array_element_size = 0;          // non-pointers don't have elements
     }
-    
-    return type;
 }
 
 const char* get_mov_suffix(MemWidth width) {
@@ -208,9 +200,9 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         }
 
         // read variable value and push as qword (with sign or zero extension)
-        VarType var_type = ctx->vars[var_index].type;
-        MemWidth var_width = var_type.size;
-        size_t offset = ctx->stack_size - ctx->vars[var_index].stack_loc;
+        Var *var = &ctx->vars[var_index];
+        MemWidth var_width = var->total_size;
+        size_t offset = ctx->stack_size - var->stack_loc;
         
         if (var_width == QWORD) {
             // can push directly
@@ -218,7 +210,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
                 "    pushq %zu(%%rsp)\n",
                 offset);
         } else if (var_width == LONG) {
-            if (var_type.is_signed) {
+            if (var->is_signed) {
                 // movslq for sign-extension (32-bit to 64-bit)
                 appendf(&ctx->output,
                     "    movslq %zu(%%rsp), %%rax\n"
@@ -233,7 +225,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             }
         } else {
             // load byte/word with sign or zero extension
-            if (var_type.is_signed) {
+            if (var->is_signed) {
                 // sign-extension: movsbq (byte) or movswq (word)
                 appendf(&ctx->output,
                     "    movs%sq %zu(%%rsp), %%rax\n"
@@ -289,14 +281,14 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             exit(EXIT_FAILURE);
         }
         
-        VarType var_type = ctx->vars[var_index].type;
-        if (!var_type.is_pointer) {
+        Var *var = &ctx->vars[var_index];
+        if (!var->is_pointer) {
             fprintf(stderr, "Cannot index non-pointer variable \"%s\"\n", 
                     term->as.array_index->ident.value);
             exit(EXIT_FAILURE);
         }
         
-        MemWidth element_size = var_type.pointee_size;
+        MemWidth element_size = var->array_element_size;
         
         // push pointer value to stack
         size_t offset = ctx->stack_size - ctx->vars[var_index].stack_loc;
@@ -453,7 +445,7 @@ void gen_scope(NodeScope *scope, CodegenCtx *ctx) {
     // calculate total bytes to pop based on variable widths
     size_t bytes_to_pop = 0;
     for (int i = prev_var_count; i < ctx->var_count; i++) {
-        bytes_to_pop += ctx->vars[i].type.size;
+        bytes_to_pop += ctx->vars[i].total_size;
     }
 
     // adjust stack pointer
@@ -491,10 +483,16 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         // push expression result (qword) to top of stack
         gen_expr(stmt->as.stmt_assign->expr, ctx);
 
-        // get variable type
-        VarType var_type = token_type_to_var_type(stmt->as.stmt_assign->var_type, 
-                                                   stmt->as.stmt_assign->is_pointer);
-        MemWidth var_width = var_type.size;
+        // push new variable to array
+        ctx->vars = realloc(ctx->vars, sizeof(Var) * (ctx->var_count + 1));
+        Var *new_var = &ctx->vars[ctx->var_count];
+        new_var->name = stmt->as.stmt_assign->ident.value;
+        
+        // set variable type
+        set_var_type_from_token(new_var, stmt->as.stmt_assign->var_type, 
+                                stmt->as.stmt_assign->is_pointer);
+        
+        MemWidth var_width = new_var->total_size;
 
         // pop expression result and allocate exact space for variable
         appendf(&ctx->output,
@@ -507,12 +505,6 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
 
         // update stack size: popped 8 bytes, allocated var_width bytes
         ctx->stack_size = ctx->stack_size - QWORD + var_width;
-
-        // push new variable to array
-        ctx->vars = realloc(ctx->vars, sizeof(Var) * (ctx->var_count + 1));
-        Var *new_var = &ctx->vars[ctx->var_count];
-        new_var->name = stmt->as.stmt_assign->ident.value;
-        new_var->type = var_type;
         new_var->stack_loc = ctx->stack_size;
         ctx->var_count++;
     } 
@@ -540,7 +532,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         gen_expr(stmt->as.stmt_reassign->expr, ctx);
 
         // pop expression result into variable's stack location
-        MemWidth var_width = ctx->vars[var_index].type.size;
+        MemWidth var_width = ctx->vars[var_index].total_size;
         size_t offset = ctx->stack_size - QWORD - ctx->vars[var_index].stack_loc;
         
         appendf(&ctx->output,
@@ -559,14 +551,14 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             exit(EXIT_FAILURE);
         }
         
-        VarType var_type = ctx->vars[var_index].type;
-        if (!var_type.is_pointer) {
+        Var *var = &ctx->vars[var_index];
+        if (!var->is_pointer) {
             fprintf(stderr, "Cannot index non-pointer variable \"%s\"\n", 
                     stmt->as.stmt_assign_array->ident.value);
             exit(EXIT_FAILURE);
         }
         
-        MemWidth element_size = var_type.pointee_size;
+        MemWidth element_size = var->array_element_size;
         
         // generate index expression
         gen_expr(stmt->as.stmt_assign_array->index, ctx);
