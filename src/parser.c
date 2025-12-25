@@ -119,7 +119,7 @@ typedef enum {
     NODE_STMT_EXIT,
     NODE_STMT_ASSIGN,
     NODE_STMT_REASSIGN,
-    NODE_STMT_ASSIGN_ARRAY,
+    NODE_STMT_ASSIGN_HEAP_ARRAY_ELEMENT,
     NODE_STMT_SCOPE,
     NODE_STMT_IF,
     NODE_STMT_FOR
@@ -145,7 +145,7 @@ typedef struct {
     Token ident;
     NodeExpr *index;
     NodeExpr *expr;
-} NodeStmtAssignArray;
+} NodeStmtAssignHeapArrayElement;
 
 typedef struct {
     NodeScope *scope;
@@ -170,7 +170,7 @@ typedef struct NodeStmt {
         NodeStmtExit *stmt_exit;
         NodeStmtAssignVar *stmt_assign;
         NodeStmtReassignVar *stmt_reassign;
-        NodeStmtAssignArray *stmt_assign_array;
+        NodeStmtAssignHeapArrayElement *stmt_assign_heap_array_element;
         NodeStmtScope *stmt_scope;
         NodeStmtIf *stmt_if;
         NodeStmtFor *stmt_for;
@@ -511,14 +511,14 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
             
             expect_token(TOKEN_SEMI, ctx);
             
-            NodeStmtAssignArray *stmt_assign_array = malloc(sizeof(NodeStmtAssignArray));
-            stmt_assign_array->ident = ident_token;
-            stmt_assign_array->index = index_expr;
-            stmt_assign_array->expr = value_expr;
+            NodeStmtAssignHeapArrayElement *stmt_assign_heap_array_element = malloc(sizeof(NodeStmtAssignHeapArrayElement));
+            stmt_assign_heap_array_element->ident = ident_token;
+            stmt_assign_heap_array_element->index = index_expr;
+            stmt_assign_heap_array_element->expr = value_expr;
             
             NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
-            stmt_base->kind = NODE_STMT_ASSIGN_ARRAY;
-            stmt_base->as.stmt_assign_array = stmt_assign_array;
+            stmt_base->kind = NODE_STMT_ASSIGN_HEAP_ARRAY_ELEMENT;
+            stmt_base->as.stmt_assign_heap_array_element = stmt_assign_heap_array_element;
             
             return stmt_base;
         }

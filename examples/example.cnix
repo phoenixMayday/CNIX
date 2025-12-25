@@ -1,1 +1,19 @@
-exit(42);
+byte mode = 1;
+qword* result = alloc(4*8*5); // 4 * byte * 5 elements
+
+
+if (mode == 0) {
+    result[0] = 2;
+} 
+else if (mode == 1) {
+    result[0] = 10;
+} 
+else {
+    result[0] = 1;
+}
+
+for (byte i = 1; i <= 4; i = i+1;) {
+    result[i] = result[0] + i*result[0];
+}
+
+exit(result[4]);

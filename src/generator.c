@@ -187,8 +187,10 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         ctx->stack_size += QWORD;
         
         appendf(&ctx->output,
+            "    # push integer literal %s\n"
             "    movq $%s, %%rax\n"
             "    pushq %%rax\n",
+            term->as.int_lit->int_lit.value,
             term->as.int_lit->int_lit.value);
     } 
     else if (term->kind == NODE_TERM_IDENT) {
@@ -207,20 +209,26 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         if (var_width == QWORD) {
             // can push directly
             appendf(&ctx->output,
+                "    # load variable %s\n"
                 "    pushq %zu(%%rsp)\n",
+                term->as.ident->ident.value,
                 offset);
         } else if (var_width == LONG) {
             if (var->is_signed) {
                 // movslq for sign-extension (32-bit to 64-bit)
                 appendf(&ctx->output,
+                    "    # load variable %s (sign-extend)\n"
                     "    movslq %zu(%%rsp), %%rax\n"
                     "    pushq %%rax\n",
+                    term->as.ident->ident.value,
                     offset);
             } else {
                 // movl automatically zero-extends to 64-bit
                 appendf(&ctx->output,
+                    "    # load variable %s (zero-extend)\n"
                     "    movl %zu(%%rsp), %%eax\n"
                     "    pushq %%rax\n",
+                    term->as.ident->ident.value,
                     offset);
             }
         } else {
@@ -228,15 +236,19 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             if (var->is_signed) {
                 // sign-extension: movsbq (byte) or movswq (word)
                 appendf(&ctx->output,
+                    "    # load variable %s (sign-extend)\n"
                     "    movs%sq %zu(%%rsp), %%rax\n"
                     "    pushq %%rax\n",
+                    term->as.ident->ident.value,
                     get_mov_suffix(var_width),
                     offset);
             } else {
                 // zero-extension: movzbq (byte) or movzwq (word)
                 appendf(&ctx->output,
+                    "    # load variable %s (zero-extend)\n"
                     "    movz%sq %zu(%%rsp), %%rax\n"
                     "    pushq %%rax\n",
+                    term->as.ident->ident.value,
                     get_mov_suffix(var_width),
                     offset);
             }
@@ -258,8 +270,10 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         
         // get address of a variable and push pointer to stack
         appendf(&ctx->output,
+            "    # address of variable %s\n"
             "    leaq %zu(%%rsp), %%rax\n"
             "    pushq %%rax\n",
+            term->as.addr_of->ident.value,
             offset);
         
         ctx->stack_size += QWORD;
@@ -269,6 +283,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         
         // pop pointer address from stack, push value at that address
         appendf(&ctx->output,
+            "    # dereference pointer\n"
             "    popq %%rax\n"
             "    movq (%%rax), %%rbx\n"
             "    pushq %%rbx\n");
@@ -293,7 +308,9 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         // push pointer value to stack
         size_t offset = ctx->stack_size - ctx->vars[var_index].stack_loc;
         appendf(&ctx->output,
+            "    # array access: %s[index] (load base pointer)\n"
             "    pushq %zu(%%rsp)\n",
+            term->as.array_index->ident.value,
             offset);
         ctx->stack_size += QWORD;
         
@@ -304,24 +321,28 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         if (element_size == QWORD || element_size == LONG) {
             // qwords and longs can be loaded directly
             appendf(&ctx->output,
+                "    # array access: %s[index] (compute address and load)\n"
                 "    popq %%rbx\n"              // index
                 "    popq %%rax\n"              // pointer
                 "    imulq $%d, %%rbx\n"        // multiply by element size
                 "    addq %%rbx, %%rax\n"       // add to pointer
                 "    mov%s (%%rax), %s\n"       // load value (into rcx or ecx)
                 "    pushq %%rcx\n",            // push result
+                term->as.array_index->ident.value,
                 element_size,
                 get_mov_suffix(element_size),
                 get_register_for_width(element_size, 'c'));
         } else {
             // byte and word need explicit zero-extension
             appendf(&ctx->output,
+                "    # array access: %s[index] (compute address and load with zero-extend)\n"
                 "    popq %%rbx\n"              // index
                 "    popq %%rax\n"              // pointer
                 "    imulq $%d, %%rbx\n"        // multiply by element size
                 "    addq %%rbx, %%rax\n"       // add to pointer
                 "    movz%sq (%%rax), %%rcx\n"  // load value with zero-extension
                 "    pushq %%rcx\n",            // push result
+                term->as.array_index->ident.value,
                 element_size,
                 get_mov_suffix(element_size));
         }
@@ -345,6 +366,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         gen_expr(term->as.alloc->size, ctx);
         
         appendf(&ctx->output,
+            "    # alloc(size) - allocate memory using mmap\n"
             "    popq %%rsi\n"              // size (2nd arg)
             "    movq $9, %%rax\n"          // mmap syscall number 
             "    xorq %%rdi, %%rdi\n"       // NULL (1st arg)
@@ -370,6 +392,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         gen_expr(term->as.free_ptr->ptr, ctx);
         
         appendf(&ctx->output,
+            "    # free(ptr, size) - deallocate memory using munmap\n"
             "    popq %%rdi\n"              // addr (1st arg)
             "    popq %%rsi\n"              // length (2nd arg)
             "    movq $11, %%rax\n"         // munmap syscall number
@@ -389,30 +412,30 @@ void gen_expr(NodeExpr *expr, CodegenCtx *ctx) {
         NodeTerm *term = expr->as.term;
         gen_term(term, ctx);
     } else if (expr->kind == NODE_EXPR_ADD) {
-        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    addq %rbx, %rax\n", ctx);
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    # binary operation: +\n    addq %rbx, %rax\n", ctx);
     } else if (expr->kind == NODE_EXPR_SUB) {
-        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    subq %rbx, %rax\n", ctx);
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    # binary operation: -\n    subq %rbx, %rax\n", ctx);
     } else if (expr->kind == NODE_EXPR_MUL) {
         // note: returns 128 bit result in rdx:rax, but we only care about lower 64 bits in rax
-        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    mulq %rbx\n", ctx);
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    # binary operation: *\n    mulq %rbx\n", ctx);
     } else if (expr->kind == NODE_EXPR_DIV) {
         // clear rdx (remainder) before div
-        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    xorq %rdx, %rdx\n"
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    # binary operation: /\n    xorq %rdx, %rdx\n"
                                                             "    divq %rbx\n", ctx);
     } else if (expr->kind == NODE_EXPR_GTE) {
-        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    setge %al\n", ctx);
+        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    # comparison: >=\n    setge %al\n", ctx);
     } else if (expr->kind == NODE_EXPR_LTE) {
-        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    setle %al\n", ctx);
+        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    # comparison: <=\n    setle %al\n", ctx);
     } else if (expr->kind == NODE_EXPR_GT) {
-        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    setg %al\n", ctx);
+        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    # comparison: >\n    setg %al\n", ctx);
     } else if (expr->kind == NODE_EXPR_LT) {
-        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    setl %al\n", ctx);
+        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    # comparison: <\n    setl %al\n", ctx);
     } else if (expr->kind == NODE_EXPR_EQUALITY) {
-        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    sete %al\n", ctx);
+        gen_comparison_op(expr->as.bin->lhs, expr->as.bin->rhs, "    # comparison: ==\n    sete %al\n", ctx);
     } else if (expr->kind == NODE_EXPR_AND) {
-        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    andq %rbx, %rax\n", ctx);
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    # binary operation: &\n    andq %rbx, %rax\n", ctx);
     } else if (expr->kind == NODE_EXPR_OR) {
-        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    orq %rbx, %rax\n", ctx);
+        gen_binary_op(expr->as.bin->lhs, expr->as.bin->rhs, "    # binary operation: |\n    orq %rbx, %rax\n", ctx);
     } else {
         fprintf(stderr, "Unknown expression kind in code generation\n");
         exit(EXIT_FAILURE);
@@ -466,6 +489,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
 
         // syscall exit
         appendf(&ctx->output,
+            "    # exit(code)\n"
             "    movq $60, %%rax\n"
             "    popq %%rdi\n"
             "    syscall\n");
@@ -496,9 +520,11 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
 
         // pop expression result and allocate exact space for variable
         appendf(&ctx->output,
+            "    # declare and initialise variable %s\n"
             "    popq %%rax\n"
             "    sub $%d, %%rsp\n"
             "    mov%s %s, (%%rsp)\n",
+            stmt->as.stmt_assign->ident.value,
             var_width,
             get_mov_suffix(var_width),
             get_register_for_width(var_width, 'a'));
@@ -536,47 +562,51 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         size_t offset = ctx->stack_size - QWORD - ctx->vars[var_index].stack_loc;
         
         appendf(&ctx->output,
+            "    # reassign variable %s\n"
             "    popq %%rax\n"
             "    mov%s %s, %zu(%%rsp)\n",
+            stmt->as.stmt_reassign->ident.value,
             get_mov_suffix(var_width),
             get_register_for_width(var_width, 'a'),
             offset);
 
         ctx->stack_size -= QWORD;
     }
-    else if (stmt->kind == NODE_STMT_ASSIGN_ARRAY) {
-        int var_index = get_var_index(stmt->as.stmt_assign_array->ident.value, ctx);
+    else if (stmt->kind == NODE_STMT_ASSIGN_HEAP_ARRAY_ELEMENT) {
+        int var_index = get_var_index(stmt->as.stmt_assign_heap_array_element->ident.value, ctx);
         if (var_index == -1) {
-            fprintf(stderr, "Undefined variable \"%s\"\n", stmt->as.stmt_assign_array->ident.value);
+            fprintf(stderr, "Undefined variable \"%s\"\n", stmt->as.stmt_assign_heap_array_element->ident.value);
             exit(EXIT_FAILURE);
         }
         
         Var *var = &ctx->vars[var_index];
         if (!var->is_pointer) {
             fprintf(stderr, "Cannot index non-pointer variable \"%s\"\n", 
-                    stmt->as.stmt_assign_array->ident.value);
+                    stmt->as.stmt_assign_heap_array_element->ident.value);
             exit(EXIT_FAILURE);
         }
         
         MemWidth element_size = var->array_element_size;
         
         // generate index expression
-        gen_expr(stmt->as.stmt_assign_array->index, ctx);
+        gen_expr(stmt->as.stmt_assign_heap_array_element->index, ctx);
         
         // generate value expression
-        gen_expr(stmt->as.stmt_assign_array->expr, ctx);
+        gen_expr(stmt->as.stmt_assign_heap_array_element->expr, ctx);
         
         // load the pointer value
         size_t offset = ctx->stack_size - ctx->vars[var_index].stack_loc;
         
         // pop value and index, load pointer, calc address and store
         appendf(&ctx->output,
+            "    # array assignment: %s[index] = value\n"
             "    popq %%rax\n"              // value
             "    popq %%rbx\n"              // index
             "    movq %zu(%%rsp), %%rcx\n"  // load pointer
             "    imulq $%d, %%rbx\n"        // multiply by element size
             "    addq %%rbx, %%rcx\n"       // add to pointer
             "    mov%s %s, (%%rcx)\n",      // store value at address
+            stmt->as.stmt_assign_heap_array_element->ident.value,
             offset - 2 * QWORD,
             element_size,
             get_mov_suffix(element_size),
@@ -593,6 +623,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         // jump to end or else if expr is 0 (false)
         int if_end_label_id = ctx->label_count++;
         appendf(&ctx->output, 
+            "    # if statement: evaluate condition\n"
             "    popq %%rax\n"
             "    cmpq $0, %%rax\n"
             "    je .Lend_if_%d\n",
@@ -625,6 +656,8 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
     }
     else if (stmt->kind == NODE_STMT_FOR) {
         // init statement
+        appendf(&ctx->output,
+            "    # for loop: initialisation\n");
         if (stmt->as.stmt_for->init != NULL) {
             gen_stmt(stmt->as.stmt_for->init, ctx);
         }
@@ -634,11 +667,14 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
 
         // start label
         appendf(&ctx->output,
+            "    # for loop: start\n"
             ".Lstart_for_%d:\n",
             for_start_label_id);
 
         // condition
         if (stmt->as.stmt_for->condition != NULL) {
+            appendf(&ctx->output,
+                "    # for loop: check condition\n");
             gen_expr(stmt->as.stmt_for->condition, ctx);
 
             // jump to end if condition is false
@@ -651,16 +687,21 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         }
 
         // loop body
+        appendf(&ctx->output,
+            "    # for loop: body\n");
         gen_scope(stmt->as.stmt_for->scope, ctx);
 
         // increment
         if (stmt->as.stmt_for->increment != NULL) {
+            appendf(&ctx->output,
+                "    # for loop: increment\n");
             gen_stmt(stmt->as.stmt_for->increment, ctx);
         }
 
         // jump back to start
         appendf(&ctx->output,
             "    jmp .Lstart_for_%d\n"
+            "    # for loop: end\n"
             ".Lend_for_%d:\n",
             for_start_label_id,
             for_end_label_id);
