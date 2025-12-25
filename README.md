@@ -30,8 +30,11 @@ make run FILE=./examples/example.cnix
 
 [pointer-type] = [type] *
 
+[array-type] = [type][]
+
 [var-type] = [type]
            | [pointer-type]
+           | [array-type]
 
 [term] = integer_literal
        | identifier
@@ -41,6 +44,11 @@ make run FILE=./examples/example.cnix
        | *[expression]                   // dereference
        | alloc([expression])             // heap allocation
        | free([expression])              // heap deallocation
+       | {[expression-list]}
+
+[expression-list] = [expression]
+                  | [expression], [expression-list]
+                  | ε
      
 [expression] = [expression] + [expression]
              | [expression] - [expression]

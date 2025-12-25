@@ -15,8 +15,17 @@ typedef struct {
     MemWidth total_size;
     int is_signed;
     int is_pointer;
-    MemWidth array_element_size; // 0 if not a pointer
+    MemWidth array_element_size; // 0 if not an array
 } Var;
+
+
+int is_stack_array(Var *var) {
+    return var->is_pointer && var->array_element_size > 0;
+}
+
+int is_stack_array(Var *var) {
+    return !var->is_pointer && var->array_element_size > 0;
+}
 
 typedef struct {
     char *output; 
