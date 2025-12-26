@@ -7,7 +7,7 @@ typedef struct {
 } ParserCtx;
 
 void increment_pos(ParserCtx *ctx) {
-    increment_pos(ctx);
+    ctx->current_pos++;
     if (ctx->current_pos > ctx->token_count) {
         fprintf(stderr, "Unexpected end of tokens\n");
         exit(EXIT_FAILURE);
@@ -36,7 +36,8 @@ typedef enum {
     NODE_TERM_DEREF,
     NODE_TERM_ARRAY_INDEX,
     NODE_TERM_ALLOC,
-    NODE_TERM_FREE
+    NODE_TERM_FREE,
+    NODE_TERM_ARRAY_LIT
 } NodeTermKind;
 
 typedef struct {
@@ -74,6 +75,12 @@ typedef struct {
 } NodeTermFree;
 
 typedef struct {
+    TokenType element_type;
+    int element_count;
+    NodeExpr **elements;
+} NodeTermArrayLit;
+
+typedef struct {
     NodeTermKind kind;
     union {
         NodeTermIntLit *int_lit;
@@ -84,6 +91,7 @@ typedef struct {
         NodeTermArrayIndex *array_index;
         NodeTermAlloc *alloc;
         NodeTermFree *free_ptr;
+        NodeTermArrayLit *array_lit;
     } as;
 } NodeTerm;
 
@@ -321,6 +329,38 @@ NodeTerm *parse_term(ParserCtx *ctx) {
         term_base->kind = NODE_TERM_PAREN;
         term_base->as.paren = paren_node;
 
+        return term_base;
+    }
+    else if (peek->type == TOKEN_OPEN_CURLY) {
+        // array literal: { elem1, elem2, ... }
+        increment_pos(ctx); // consume '{'
+        
+        NodeTermArrayLit *array_lit_node = malloc(sizeof(NodeTermArrayLit));
+        array_lit_node->element_count = 0;
+        array_lit_node->elements = NULL;
+        
+        // parse elements until closing curly brace
+        Token *peek_inner = &ctx->tokens[ctx->current_pos];
+        while (ctx->current_pos < ctx->token_count && peek_inner->type != TOKEN_CLOSE_CURLY) {
+            NodeExpr *elem_expr = parse_expr(0, ctx);
+            array_lit_node->elements = realloc(array_lit_node->elements, 
+                                               sizeof(NodeExpr*) * (array_lit_node->element_count + 1));
+            array_lit_node->elements[array_lit_node->element_count] = elem_expr;
+            array_lit_node->element_count++;
+            
+            peek_inner = &ctx->tokens[ctx->current_pos];
+            if (peek_inner->type == TOKEN_COMMA) {
+                increment_pos(ctx); // consume ','
+                peek_inner = &ctx->tokens[ctx->current_pos];
+            }
+        }
+        
+        expect_token(TOKEN_CLOSE_CURLY, ctx);
+        
+        NodeTerm *term_base = malloc(sizeof(NodeTerm));
+        term_base->kind = NODE_TERM_ARRAY_LIT;
+        term_base->as.array_lit = array_lit_node;
+        
         return term_base;
     }
     else {

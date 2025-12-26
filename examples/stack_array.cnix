@@ -1,0 +1,19 @@
+// create a stack array with qword elements
+qword[] arr = {10, 20, 30, 40, 50};
+
+// access elements
+qword first = arr[0];   // 10
+qword third = arr[2];   // 30
+qword fifth = arr[4];   // 50
+
+// calculate sum
+qword sum = 0;
+for (qword i = 0; i < 5; i = i + 1;) {
+    sum = sum + arr[i];
+}
+
+// sum should be 10 + 20 + 30 + 40 + 50 = 150
+// first + third + fifth = 10 + 30 + 50 = 90
+// Total: 150 + 90 = 240
+
+exit(sum + first + third + fifth);
