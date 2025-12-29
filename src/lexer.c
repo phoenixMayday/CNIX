@@ -47,6 +47,27 @@ typedef enum {
     TOKEN_COMMA
 } TokenType;
 
+static int is_type_token(TokenType token_type) {
+    switch (token_type) {
+        case TOKEN_BYTE:
+        case TOKEN_WORD:
+        case TOKEN_LONG:
+        case TOKEN_QWORD:
+        case TOKEN_INT8:
+        case TOKEN_INT16:
+        case TOKEN_INT32:
+        case TOKEN_INT64:
+        case TOKEN_UINT8:
+        case TOKEN_UINT16:
+        case TOKEN_UINT32:
+        case TOKEN_UINT64:
+        case TOKEN_CHAR:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
 static int get_precedence(int token_type) {
     switch (token_type) {
         case TOKEN_ASTERISK:

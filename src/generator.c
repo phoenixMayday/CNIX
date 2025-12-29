@@ -12,10 +12,10 @@ typedef enum {
 typedef struct {
     char *name;
     size_t stack_loc;
-    MemWidth total_size;
+    MemWidth total_width;
     int is_signed;
     int is_pointer;
-    MemWidth array_element_size; // 0 if not an array
+    MemWidth array_element_width; // 0 if not an array
 } Var;
 
 int is_token_signed(TokenType token_type) {
@@ -31,11 +31,11 @@ int is_token_signed(TokenType token_type) {
 }
 
 int is_heap_array(Var *var) {
-    return var->is_pointer && var->array_element_size > 0;
+    return var->is_pointer && var->array_element_width > 0;
 }
 
 int is_stack_array(Var *var) {
-    return !var->is_pointer && var->array_element_size > 0;
+    return !var->is_pointer && var->array_element_width > 0;
 }
 
 typedef struct {
@@ -79,13 +79,13 @@ void set_var_type_from_token(Var *var, TokenType token_type, int is_pointer) {
     
     var->is_pointer = is_pointer;
     if (is_pointer) {
-        var->total_size = QWORD;              // pointers are always 8 bytes
+        var->total_width = QWORD;              // pointers are always 8 bytes
         var->is_signed = 0;
-        var->array_element_size = base_size;  // remember what they point to
+        var->array_element_width = base_size;  // remember what they point to
     } else {
-        var->total_size = base_size;
+        var->total_width = base_size;
         var->is_signed = base_signed;
-        var->array_element_size = 0;          // non-pointers don't have elements
+        var->array_element_width = 0;          // non-pointers don't have elements
     }
 }
 
@@ -205,7 +205,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
 
         // read variable value and push as qword (with sign or zero extension)
         Var *var = &ctx->vars[var_index];
-        MemWidth var_width = var->total_size;
+        MemWidth var_width = var->total_width;
         size_t offset = ctx->stack_size - var->stack_loc;
         
         if (var_width == QWORD) {
@@ -299,13 +299,13 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         }
         
         Var *var = &ctx->vars[var_index];
-        if (var->array_element_size == 0) {
+        if (var->array_element_width == 0) {
             fprintf(stderr, "Cannot index non-array variable \"%s\"\n", 
                     term->as.array_index->ident.value);
             exit(EXIT_FAILURE);
         }
         
-        MemWidth element_size = var->array_element_size;
+        MemWidth element_size = var->array_element_width;
         
         if (is_stack_array(var)) {
             // stack array: calculate address directly from stack offset
@@ -516,7 +516,7 @@ void gen_scope(NodeScope *scope, CodegenCtx *ctx) {
     // calculate total bytes to pop based on variable widths
     size_t bytes_to_pop = 0;
     for (int i = prev_var_count; i < ctx->var_count; i++) {
-        bytes_to_pop += ctx->vars[i].total_size;
+        bytes_to_pop += ctx->vars[i].total_width;
     }
 
     // adjust stack pointer
@@ -574,8 +574,8 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             
             // update variable to be a stack array
             new_var->is_pointer = 0;
-            new_var->array_element_size = element_size;
-            new_var->total_size = element_count * element_size;
+            new_var->array_element_width = element_size;
+            new_var->total_width = element_count * element_size;
             new_var->is_signed = is_token_signed(element_type);
             
             appendf(&ctx->output,
@@ -591,7 +591,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             // regular value assignment
             gen_expr(stmt->as.stmt_assign->expr, ctx);
             
-            MemWidth var_width = new_var->total_size;
+            MemWidth var_width = new_var->total_width;
 
             // pop expression result and allocate exact space for variable
             appendf(&ctx->output,
@@ -635,7 +635,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         gen_expr(stmt->as.stmt_reassign->expr, ctx);
 
         // pop expression result into variable's stack location
-        MemWidth var_width = ctx->vars[var_index].total_size;
+        MemWidth var_width = ctx->vars[var_index].total_width;
         size_t offset = ctx->stack_size - QWORD - ctx->vars[var_index].stack_loc;
         
         appendf(&ctx->output,
@@ -663,7 +663,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             exit(EXIT_FAILURE);
         }
         
-        MemWidth element_size = var->array_element_size;
+        MemWidth element_size = var->array_element_width;
         
         // generate index expression
         gen_expr(stmt->as.stmt_assign_heap_array_element->index, ctx);
