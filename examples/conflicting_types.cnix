@@ -1,0 +1,5 @@
+qword res = 99999;
+byte first = 5;
+word second = 10;
+res = first + second;
+exit(res);

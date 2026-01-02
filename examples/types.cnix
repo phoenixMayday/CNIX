@@ -1,0 +1,5 @@
+byte a = 10;
+word b = 1000;
+long c = 100000;
+qword result = a + b + c;
+exit(result);

@@ -1,0 +1,20 @@
+// Allocate array of 5 qwords (5 * 8 = 40 bytes)
+qword* arr = alloc(40);
+
+// Set some values
+arr[0] = 10;
+arr[1] = 20;
+arr[2] = 30;
+
+// Read and use values
+qword x = arr[0] + arr[1];  // x = 30
+qword y = arr[2];           // y = 30
+
+_ = free(arr, 40);
+
+// Test address-of operator
+qword z = 100;
+qword* ptr = &z;
+qword val = *ptr;  // val = 100
+
+exit(x + y + val);  // Should exit with 160

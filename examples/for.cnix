@@ -1,7 +1,13 @@
-var count = 0;
+qword totalcount = 0;
+qword tempcount = 0;
 
-for (var i = 0-5; i <= 5; i = i + 1;) {
-    count = count + i;
+for (qword i = 0; i <= 65535/2; i = i + 1;) {
+    tempcount = tempcount + 1;
+    
+    if (tempcount == 255) {
+        tempcount = 0;
+        totalcount = totalcount + 1;
+    }
 }
 
-exit(count);
+exit(totalcount);

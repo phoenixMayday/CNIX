@@ -1,0 +1,5 @@
+char[] str = "eva";
+
+char c = str[2];
+
+exit(c);

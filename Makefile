@@ -14,10 +14,12 @@ $(TARGET): $(SRC)
 clean:
 	rm -f $(TARGET) out.s out
 
-run: $(TARGET)
+run:
 ifndef FILE
 	$(error FILE is not set. Usage: make run FILE=examples/example.cnix)
 endif
+	@$(MAKE) clean
+	@$(MAKE) $(TARGET)
 	./$(TARGET) $(FILE)
 	gcc -nostdlib out.s -o out
 	./out

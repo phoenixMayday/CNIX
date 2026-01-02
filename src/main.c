@@ -42,7 +42,6 @@ int main(int argc, char *argv[]) {
             tokens[i].type == TOKEN_MINUS ? "MINUS" :
             tokens[i].type == TOKEN_ASTERISK ? "MUL" :
             tokens[i].type == TOKEN_FSLASH ? "DIV" :
-            tokens[i].type == TOKEN_VAR ? "VAR" :
             tokens[i].type == TOKEN_EQUALS ? "EQUALS" :
             tokens[i].type == TOKEN_IDENT ? "IDENT" :
             tokens[i].type == TOKEN_OPEN_PAREN ? "OPEN_PAREN" :
@@ -59,6 +58,26 @@ int main(int argc, char *argv[]) {
             tokens[i].type == TOKEN_AMPERSAND ? "AMPERSAND" :
             tokens[i].type == TOKEN_PIPE ? "PIPE" :
             tokens[i].type == TOKEN_FOR ? "FOR" :
+            tokens[i].type == TOKEN_BYTE ? "BYTE" :
+            tokens[i].type == TOKEN_WORD ? "WORD" :
+            tokens[i].type == TOKEN_LONG ? "LONG" :
+            tokens[i].type == TOKEN_QWORD ? "QWORD" :
+            tokens[i].type == TOKEN_INT8 ? "INT8" :
+            tokens[i].type == TOKEN_INT16 ? "INT16" :
+            tokens[i].type == TOKEN_INT32 ? "INT32" :
+            tokens[i].type == TOKEN_INT64 ? "INT64" :
+            tokens[i].type == TOKEN_UINT8 ? "UINT8" :
+            tokens[i].type == TOKEN_UINT16 ? "UINT16" :
+            tokens[i].type == TOKEN_UINT32 ? "UINT32" :
+            tokens[i].type == TOKEN_UINT64 ? "UINT64" :
+            tokens[i].type == TOKEN_CHAR ? "CHAR" :
+            tokens[i].type == TOKEN_ALLOC ? "ALLOC" :
+            tokens[i].type == TOKEN_FREE ? "FREE" :
+            tokens[i].type == TOKEN_OPEN_SQUARE ? "OPEN_SQUARE" :
+            tokens[i].type == TOKEN_CLOSE_SQUARE ? "CLOSE_SQUARE" :
+            tokens[i].type == TOKEN_COMMA ? "COMMA" :
+            tokens[i].type == TOKEN_QUOTE ? "QUOTE" :
+            tokens[i].type == TOKEN_CHAR_LIT ? "CHAR_LIT" :
             "UNKNOWN"
         );
     }
