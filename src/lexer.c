@@ -45,8 +45,7 @@ typedef enum {
     TOKEN_OPEN_SQUARE,
     TOKEN_CLOSE_SQUARE,
     TOKEN_COMMA,
-    TOKEN_SINGLE_QUOTE,
-    TOKEN_DOUBLE_QUOTE,
+    TOKEN_QUOTE,
     TOKEN_CHAR_LIT
 } TokenType;
 
@@ -301,16 +300,14 @@ Token *tokenise(const char *str, int *out_count) {
         } else if (c == ',') {
             push_token(&ctx, TOKEN_COMMA, NULL);
         } else if (c == '\'') {
-            push_token(&ctx, TOKEN_SINGLE_QUOTE, NULL);
             ctx.str_index++;
             lex_char(&ctx);
             if (str[ctx.str_index] != '\'') {
                 fprintf(stderr, "Expected closing single quote for character literal\n");
                 exit(EXIT_FAILURE);
             }
-            push_token(&ctx, TOKEN_SINGLE_QUOTE, NULL);
         } else if (c == '\"') {
-            push_token(&ctx, TOKEN_DOUBLE_QUOTE, NULL);
+            push_token(&ctx, TOKEN_QUOTE, NULL);
             ctx.str_index++;
             while (ctx.str_index < strlen(str) && str[ctx.str_index] != '"') {
                 lex_char(&ctx);
@@ -319,7 +316,7 @@ Token *tokenise(const char *str, int *out_count) {
                 fprintf(stderr, "Expected closing double quote for string literal\n");
                 exit(EXIT_FAILURE);
             }
-            push_token(&ctx, TOKEN_DOUBLE_QUOTE, NULL);
+            push_token(&ctx, TOKEN_QUOTE, NULL);
         }
         else if (isspace(c)) {
             ctx.str_index++;

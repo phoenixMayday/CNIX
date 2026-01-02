@@ -185,12 +185,22 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         ctx->stack_size += QWORD;
         
         appendf(&ctx->output,
-            "    # push integer literal %s\n"
+            "    # push integer literal `%s`\n"
             "    movq $%s, %%rax\n"
             "    pushq %%rax\n",
             term->as.int_lit->int_lit.value,
             term->as.int_lit->int_lit.value);
-    } 
+    }
+    else if (term->kind == NODE_TERM_CHAR_LIT) {
+        // treat char literal the same as integer literal
+        ctx->stack_size += QWORD;
+        appendf(&ctx->output,
+            "    # push character literal `%s`\n"
+            "    movq $%s, %%rax\n"
+            "    pushq %%rax\n",
+            term->as.char_lit->char_lit.value,
+            term->as.char_lit->char_lit.value);
+    }
     else if (term->kind == NODE_TERM_IDENT) {
         // find variable
         int var_index = get_var_index(term->as.ident->ident.value, ctx);
@@ -207,7 +217,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         if (var_width == QWORD) {
             // can push directly
             appendf(&ctx->output,
-                "    # load variable %s\n"
+                "    # load variable `%s`\n"
                 "    pushq %zu(%%rsp)\n",
                 term->as.ident->ident.value,
                 offset);
@@ -215,7 +225,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             if (var->is_signed) {
                 // movslq for sign-extension (32-bit to 64-bit)
                 appendf(&ctx->output,
-                    "    # load variable %s (sign-extend)\n"
+                    "    # load variable `%s` (sign-extend)\n"
                     "    movslq %zu(%%rsp), %%rax\n"
                     "    pushq %%rax\n",
                     term->as.ident->ident.value,
@@ -223,7 +233,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             } else {
                 // movl automatically zero-extends to 64-bit
                 appendf(&ctx->output,
-                    "    # load variable %s (zero-extend)\n"
+                    "    # load variable `%s` (zero-extend)\n"
                     "    movl %zu(%%rsp), %%eax\n"
                     "    pushq %%rax\n",
                     term->as.ident->ident.value,
@@ -234,7 +244,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             if (var->is_signed) {
                 // sign-extension: movsbq (byte) or movswq (word)
                 appendf(&ctx->output,
-                    "    # load variable %s (sign-extend)\n"
+                    "    # load variable `%s` (sign-extend)\n"
                     "    movs%sq %zu(%%rsp), %%rax\n"
                     "    pushq %%rax\n",
                     term->as.ident->ident.value,
@@ -243,7 +253,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             } else {
                 // zero-extension: movzbq (byte) or movzwq (word)
                 appendf(&ctx->output,
-                    "    # load variable %s (zero-extend)\n"
+                    "    # load variable `%s` (zero-extend)\n"
                     "    movz%sq %zu(%%rsp), %%rax\n"
                     "    pushq %%rax\n",
                     term->as.ident->ident.value,
@@ -268,7 +278,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         
         // get address of a variable and push pointer to stack
         appendf(&ctx->output,
-            "    # address of variable %s\n"
+            "    # address of variable `%s`\n"
             "    leaq %zu(%%rsp), %%rax\n"
             "    pushq %%rax\n",
             term->as.addr_of->ident.value,
@@ -305,7 +315,10 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         
         if (is_stack_array(var)) {
             // stack array: calculate address directly from stack offset
-            size_t base_offset = ctx->stack_size - var->stack_loc;
+            // Note: elements are pushed in order, so element 0 is at highest address
+            // We need to access from the end: offset = (array_end - element_size) - (index * element_size)
+            size_t array_end_offset = ctx->stack_size - var->stack_loc;
+            size_t array_start_offset = array_end_offset + var->total_width - element_size;
             
             // generate index expression
             gen_expr(term->as.array_index->index, ctx);
@@ -316,25 +329,27 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
                     "    # stack array access: %s[index] (compute address and load)\n"
                     "    popq %%rbx\n"               // index
                     "    imulq $%d, %%rbx\n"         // multiply by element size
-                    "    addq $%zu, %%rbx\n"         // add base offset
-                    "    mov%s (%%rsp, %%rbx), %s\n" // load value
+                    "    movq $%zu, %%rax\n"         // load array start offset
+                    "    subq %%rbx, %%rax\n"        // subtract index offset
+                    "    mov%s (%%rsp, %%rax), %s\n" // load value
                     "    pushq %%rcx\n",             // push result
                     term->as.array_index->ident.value,
                     element_size,
-                    base_offset,
+                    array_start_offset,
                     get_mov_suffix(element_size),
                     get_register_for_width(element_size, 'c'));
             } else {
                 appendf(&ctx->output,
                     "    # stack array access: %s[index] (compute address and load with zero-extend)\n"
-                    "    popq %%rbx\n"              // index
-                    "    imulq $%d, %%rbx\n"        // multiply by element size
-                    "    addq $%zu, %%rbx\n"        // add base offset
-                    "    movz%sq (%%rsp, %%rbx), %%rcx\n" // load value with zero-extension
-                    "    pushq %%rcx\n",            // push result
+                    "    popq %%rbx\n"                    // index
+                    "    imulq $%d, %%rbx\n"              // multiply by element size
+                    "    movq $%zu, %%rax\n"              // load array start offset
+                    "    subq %%rbx, %%rax\n"             // subtract index offset
+                    "    movz%sq (%%rsp, %%rax), %%rcx\n" // load value with zero-extension
+                    "    pushq %%rcx\n",                  // push result
                     term->as.array_index->ident.value,
                     element_size,
-                    base_offset,
+                    array_start_offset,
                     get_mov_suffix(element_size));
             }
         } else {
@@ -436,13 +451,16 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         ctx->stack_size -= QWORD;
     }
     else if (term->kind == NODE_TERM_ARRAY_LIT) {
-        // array literal: { elem1, elem2, ... }
-        // Note: elements are pushed as qwords; the assignment statement handles sizing
+        // default array literal: { elem1, elem2, ... }
+        // if array is used in a variable declaration, the assign statement will handle storing the elements instead
         int element_count = term->as.array_lit->element_count;
 
         // push all the elements onto the stack
         for (int i = 0; i < element_count; i++) {
             gen_expr(term->as.array_lit->elements[i], ctx);
+
+            // `gen_expr` pushes qwords, but we want our default behaviour to store bytes (might be easier for strings)
+            ctx->stack_size -= 3 * BYTE;
         }
     }
     else {
@@ -578,10 +596,25 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
                 "    # declare and initialise stack array %s\n",
                 stmt->as.stmt_assign->ident.value);
             
-            // generate the array literal (pushes all elements)
-            gen_expr(stmt->as.stmt_assign->expr, ctx);
+            // push each element with proper sizing
+            for (int i = 0; i < element_count; i++) {
+                gen_expr(array_lit->elements[i], ctx);
+                
+                // pop qword and store with proper element size
+                appendf(&ctx->output,
+                    "    # store array element with specific size\n"
+                    "    popq %%rax\n"
+                    "    sub $%d, %%rsp\n"
+                    "    mov%s %s, (%%rsp)\n",
+                    element_size,
+                    get_mov_suffix(element_size),
+                    get_register_for_width(element_size, 'a'));
+                
+                // adjust stack: popped qword but allocated element_size
+                ctx->stack_size += element_size - QWORD;
+            }
             
-            // stack already has the array elements
+            // stack now has the array elements with proper sizing
             new_var->stack_loc = ctx->stack_size;
         } else {
             // regular value assignment
@@ -591,7 +624,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
 
             // pop expression result and allocate exact space for variable
             appendf(&ctx->output,
-                "    # declare and initialise variable %s\n"
+                "    # declare and initialise variable `%s`\n"
                 "    popq %%rax\n"
                 "    sub $%d, %%rsp\n"
                 "    mov%s %s, (%%rsp)\n",
@@ -635,7 +668,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         size_t offset = ctx->stack_size - QWORD - ctx->vars[var_index].stack_loc;
         
         appendf(&ctx->output,
-            "    # reassign variable %s\n"
+            "    # reassign variable `%s`\n"
             "    popq %%rax\n"
             "    mov%s %s, %zu(%%rsp)\n",
             stmt->as.stmt_reassign->ident.value,

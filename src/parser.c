@@ -30,6 +30,7 @@ NodeExpr *parse_expr(int min_prec, ParserCtx *ctx);
 // Terms
 typedef enum {
     NODE_TERM_INT_LIT,
+    NODE_TERM_CHAR_LIT,
     NODE_TERM_IDENT,
     NODE_TERM_PAREN,
     NODE_TERM_ADDR_OF,
@@ -44,6 +45,10 @@ typedef enum {
 typedef struct {
     Token int_lit;
 } NodeTermIntLit;
+
+typedef struct {
+    Token char_lit;
+} NodeTermCharLit;
 
 typedef struct {
     Token ident;
@@ -76,7 +81,7 @@ typedef struct {
 } NodeTermFree;
 
 typedef struct {
-    TokenType element_type;
+    //TokenType element_type;
     int element_count;
     NodeExpr **elements;
 } NodeTermArrayLit;
@@ -90,6 +95,7 @@ typedef struct {
     NodeTermKind kind;
     union {
         NodeTermIntLit *int_lit;
+        NodeTermCharLit *char_lit;
         NodeTermIdent *ident;
         NodeTermParen *paren;
         NodeTermAddrOf *addr_of;
@@ -337,7 +343,7 @@ NodeTerm *parse_term(ParserCtx *ctx) {
         term_base->as.paren = paren_node;
 
         return term_base;
-    }
+    } 
     else if (peek->type == TOKEN_OPEN_CURLY) {
         // array literal: { elem1, elem2, ... }
         increment_pos(ctx); // consume '{'
@@ -368,6 +374,58 @@ NodeTerm *parse_term(ParserCtx *ctx) {
         term_base->kind = NODE_TERM_ARRAY_LIT;
         term_base->as.array_lit = array_lit_node;
         
+        return term_base;
+    }
+    else if (peek->type == TOKEN_CHAR_LIT) {
+        // character literal
+        expect_token(TOKEN_CHAR_LIT, ctx);
+
+        NodeTermCharLit *char_lit_node = malloc(sizeof(NodeTermCharLit));
+        char_lit_node->char_lit = ctx->tokens[ctx->current_pos - 1];  // -1 because `expect_token` incremented
+
+        NodeTerm *term_base = malloc(sizeof(NodeTerm));
+        term_base->kind = NODE_TERM_CHAR_LIT;
+        term_base->as.char_lit = char_lit_node;
+
+        return term_base;
+    }
+    else if (peek->type == TOKEN_QUOTE) {
+        // string literal: "string"
+        increment_pos(ctx); // double quote
+
+        // collect all char literals until closing double quote
+        NodeExpr **char_terms = NULL;
+        int char_token_count = 0;
+
+        Token *peek_inner = &ctx->tokens[ctx->current_pos];
+        while (ctx->current_pos < ctx->token_count && peek_inner->type != TOKEN_QUOTE) {
+            // create proper node hierarchy (expr as a term as a char_lit)
+            NodeTerm *char_term_node = parse_term(ctx); // the next term(s) inside the quotes must be char literals
+            
+            NodeExpr *char_expr_node = malloc(sizeof(NodeExpr));
+            char_expr_node->kind = NODE_EXPR_TERM;
+            char_expr_node->as.term = char_term_node;
+            
+            // add char literal to string tokens
+            char_terms = realloc(char_terms, sizeof(NodeExpr*) * (char_token_count + 1));
+            char_terms[char_token_count] = char_expr_node;
+            char_token_count++;
+
+            // update peek_inner (pos already incremented by `expect_token`)
+            peek_inner = &ctx->tokens[ctx->current_pos];
+        }
+
+        expect_token(TOKEN_QUOTE, ctx);
+
+        NodeTermArrayLit *string_node = malloc(sizeof(NodeTermArrayLit));
+        //string_node->element_type = TOKEN_CHAR;
+        string_node->element_count = char_token_count;
+        string_node->elements = char_terms;
+
+        NodeTerm *term_base = malloc(sizeof(NodeTerm));
+        term_base->kind = NODE_TERM_ARRAY_LIT;
+        term_base->as.array_lit = string_node;
+
         return term_base;
     }
     else if (is_type_token(peek->type)) {
@@ -555,6 +613,14 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
 
         // expect expression
         NodeExpr *expr = parse_expr(0, ctx);
+
+        // // set element_type of stack array if applicable
+        // if (is_stack_array) {
+        //     if (expr->kind == NODE_EXPR_TERM && 
+        //         expr->as.term->kind == NODE_TERM_ARRAY_LIT) {
+        //         expr->as.term->as.array_lit->element_type = var_type;
+        //     }
+        // }
 
         // expect semicolon
         expect_token(TOKEN_SEMI, ctx);

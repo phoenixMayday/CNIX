@@ -1,13 +1,11 @@
-char* arr = alloc(10);
+char* arr = alloc(2);
 
-arr[0] = 65;  // 'A'
-arr[1] = 66;  // 'B'
-arr[2] = 67;  // 'C'
+arr[0] = 'a';
+arr[1] = 'b';
 
 qword a = arr[0];
 qword b = arr[1];
-qword c = arr[2];
 
-_ = free(arr, 10);
+_ = free(arr, 2);
 
-exit(a + b + c);  // 65 + 66 + 67 = 198
+exit(a + b);

@@ -76,6 +76,8 @@ int main(int argc, char *argv[]) {
             tokens[i].type == TOKEN_OPEN_SQUARE ? "OPEN_SQUARE" :
             tokens[i].type == TOKEN_CLOSE_SQUARE ? "CLOSE_SQUARE" :
             tokens[i].type == TOKEN_COMMA ? "COMMA" :
+            tokens[i].type == TOKEN_QUOTE ? "QUOTE" :
+            tokens[i].type == TOKEN_CHAR_LIT ? "CHAR_LIT" :
             "UNKNOWN"
         );
     }

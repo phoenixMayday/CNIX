@@ -46,11 +46,16 @@ make run FILE=./examples/example.cnix
        | free([expression])              // heap deallocation
        | {[expression-list]}             // stack array allocation
        | [type]([expression])            // type conversion
+       | 'char_lit'                      // character
+       | "[string]"                      // string
 
 [expression-list] = [expression]
                   | [expression], [expression-list]
                   | ε
-     
+
+[string] = char_lit[string]
+         | ε
+
 [expression] = [expression] + [expression]
              | [expression] - [expression]
              | [expression] * [expression]
