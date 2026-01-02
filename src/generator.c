@@ -15,7 +15,7 @@ typedef struct {
     MemWidth total_width;
     int is_signed;
     int is_pointer;
-    MemWidth array_element_width; // 0 if not an array
+    MemWidth element_width; // 0 if not an array
 } Var;
 
 int is_token_signed(TokenType token_type) {
@@ -30,12 +30,8 @@ int is_token_signed(TokenType token_type) {
     }
 }
 
-int is_heap_array(Var *var) {
-    return var->is_pointer && var->array_element_width > 0;
-}
-
 int is_stack_array(Var *var) {
-    return !var->is_pointer && var->array_element_width > 0;
+    return !var->is_pointer && var->element_width > 0;
 }
 
 typedef struct {
@@ -79,13 +75,13 @@ void set_var_type_from_token(Var *var, TokenType token_type, int is_pointer) {
     
     var->is_pointer = is_pointer;
     if (is_pointer) {
-        var->total_width = QWORD;              // pointers are always 8 bytes
+        var->total_width = QWORD;        // pointers are always 8 bytes
         var->is_signed = 0;
-        var->array_element_width = base_size;  // remember what they point to
+        var->element_width = base_size;  // remember what they point to
     } else {
         var->total_width = base_size;
         var->is_signed = base_signed;
-        var->array_element_width = 0;          // non-pointers don't have elements
+        var->element_width = 0;          // non-pointers don't have elements
     }
 }
 
@@ -299,13 +295,13 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         }
         
         Var *var = &ctx->vars[var_index];
-        if (var->array_element_width == 0) {
+        if (var->element_width == 0) {
             fprintf(stderr, "Cannot index non-array variable \"%s\"\n", 
                     term->as.array_index->ident.value);
             exit(EXIT_FAILURE);
         }
         
-        MemWidth element_size = var->array_element_width;
+        MemWidth element_size = var->element_width;
         
         if (is_stack_array(var)) {
             // stack array: calculate address directly from stack offset
@@ -318,11 +314,11 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             if (element_size == QWORD || element_size == LONG) {
                 appendf(&ctx->output,
                     "    # stack array access: %s[index] (compute address and load)\n"
-                    "    popq %%rbx\n"              // index
-                    "    imulq $%d, %%rbx\n"        // multiply by element size
-                    "    addq $%zu, %%rbx\n"        // add base offset
+                    "    popq %%rbx\n"               // index
+                    "    imulq $%d, %%rbx\n"         // multiply by element size
+                    "    addq $%zu, %%rbx\n"         // add base offset
                     "    mov%s (%%rsp, %%rbx), %s\n" // load value
-                    "    pushq %%rcx\n",            // push result
+                    "    pushq %%rcx\n",             // push result
                     term->as.array_index->ident.value,
                     element_size,
                     base_offset,
@@ -574,7 +570,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             
             // update variable to be a stack array
             new_var->is_pointer = 0;
-            new_var->array_element_width = element_size;
+            new_var->element_width = element_size;
             new_var->total_width = element_count * element_size;
             new_var->is_signed = is_token_signed(element_type);
             
@@ -663,7 +659,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             exit(EXIT_FAILURE);
         }
         
-        MemWidth element_size = var->array_element_width;
+        MemWidth element_size = var->element_width;
         
         // generate index expression
         gen_expr(stmt->as.stmt_assign_heap_array_element->index, ctx);

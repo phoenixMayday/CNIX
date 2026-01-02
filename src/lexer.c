@@ -44,7 +44,10 @@ typedef enum {
     TOKEN_FREE,
     TOKEN_OPEN_SQUARE,
     TOKEN_CLOSE_SQUARE,
-    TOKEN_COMMA
+    TOKEN_COMMA,
+    TOKEN_SINGLE_QUOTE,
+    TOKEN_DOUBLE_QUOTE,
+    TOKEN_CHAR_LIT
 } TokenType;
 
 static int is_type_token(TokenType token_type) {
@@ -92,16 +95,53 @@ static int get_precedence(int token_type) {
     }
 }
 
+char *char_to_denary_string(char c) {
+    char *buf = malloc(4);   // max "255" + null terminator
+    if (buf)
+        snprintf(buf, 4, "%d", (unsigned char)c);
+    return buf;
+}
+
 typedef struct {
     TokenType type;
     char *value;
 } Token;
 
-static void push_token(Token **tokens, int *count, TokenType type, char *value) {
-    *tokens = realloc(*tokens, sizeof(Token) * (*count + 1));
-    (*tokens)[*count].type = type;
-    (*tokens)[*count].value = value;
-    (*count)++;
+typedef struct {
+    const char* str;
+    size_t str_index;
+    Token *tokens;
+    int token_count;
+} LexerCtx;
+
+static void push_token(LexerCtx *ctx, TokenType type, char *value) {
+    ctx->tokens = realloc(ctx->tokens, sizeof(Token) * (ctx->token_count + 1));
+    ctx->tokens[ctx->token_count].type = type;
+    ctx->tokens[ctx->token_count].value = value;
+    ctx->token_count++;
+}
+
+void lex_char(LexerCtx *ctx) {
+    if (ctx->str[ctx->str_index] == '\\') {
+        // escape sequence
+        ctx->str_index++;
+        char esc_body = ctx->str[ctx->str_index];
+        char esc_char;
+        switch (esc_body) {
+            case 'n': esc_char = '\n'; break;
+            case '\\': esc_char = '\\'; break;
+            case '\'': esc_char = '\''; break;
+            case '\"': esc_char = '\"'; break;
+            default:
+                fprintf(stderr, "Unknown escape sequence: \\%c\n", esc_body);
+                exit(EXIT_FAILURE);
+        }
+        push_token(ctx, TOKEN_CHAR_LIT, char_to_denary_string(esc_char));
+    }
+    else {
+        push_token(ctx, TOKEN_CHAR_LIT, char_to_denary_string(ctx->str[ctx->str_index]));
+    }
+    ctx->str_index++;
 }
 
 static void *copy_lexme(const char *str, int start, int len) {
@@ -112,85 +152,89 @@ static void *copy_lexme(const char *str, int start, int len) {
 }
 
 Token *tokenise(const char *str, int *out_count) {
-    Token *tokens = NULL;
-    int count = 0;
+    LexerCtx ctx = {
+        .str = str,
+        .str_index = 0,
+        .tokens = NULL,
+        .token_count = 0
+    };
 
-    for (size_t i = 0; i < strlen(str); i++) {
-        char c = str[i];
-        char c_next = str[i + 1];
+    while (ctx.str_index < strlen(str)) {
+        char c = str[ctx.str_index];
+        char c_next = str[ctx.str_index + 1];
         if (isalpha(c) || c == '_') {
-            int start = i;
+            int start = ctx.str_index;
             int len = 0;
 
-            while (isalnum(str[i + len]) || str[i + len] == '_')
+            while (isalnum(str[ctx.str_index + len]) || str[ctx.str_index + len] == '_')
                 len++;
             
             char *buf = copy_lexme(str, start, len);
-            i += len - 1; // -1 because for loop will increment i
+            ctx.str_index += len - 1; // -1 because for loop will increment i
            
             if (strcmp(buf, "exit") == 0) {
-                push_token(&tokens, &count, TOKEN_EXIT, NULL);
+                push_token(&ctx, TOKEN_EXIT, NULL);
                 free(buf);
             } else if (strcmp(buf, "if") == 0) {
-                push_token(&tokens, &count, TOKEN_IF, NULL);
+                push_token(&ctx, TOKEN_IF, NULL);
                 free(buf);
             } else if (strcmp(buf, "else") == 0) {
-                push_token(&tokens, &count, TOKEN_ELSE, NULL);
+                push_token(&ctx, TOKEN_ELSE, NULL);
                 free(buf);
             } else if (strcmp(buf, "for") == 0) {
-                push_token(&tokens, &count, TOKEN_FOR, NULL);
+                push_token(&ctx, TOKEN_FOR, NULL);
                 free(buf);
             } else if (strcmp(buf, "byte") == 0) {
-                push_token(&tokens, &count, TOKEN_BYTE, NULL);
+                push_token(&ctx, TOKEN_BYTE, NULL);
                 free(buf);
             } else if (strcmp(buf, "word") == 0) {
-                push_token(&tokens, &count, TOKEN_WORD, NULL);
+                push_token(&ctx, TOKEN_WORD, NULL);
                 free(buf);
             } else if (strcmp(buf, "long") == 0) {
-                push_token(&tokens, &count, TOKEN_LONG, NULL);
+                push_token(&ctx, TOKEN_LONG, NULL);
                 free(buf);
             } else if (strcmp(buf, "qword") == 0) {
-                push_token(&tokens, &count, TOKEN_QWORD, NULL);
+                push_token(&ctx, TOKEN_QWORD, NULL);
                 free(buf);
             } else if (strcmp(buf, "int8") == 0) {
-                push_token(&tokens, &count, TOKEN_INT8, NULL);
+                push_token(&ctx, TOKEN_INT8, NULL);
                 free(buf);
             } else if (strcmp(buf, "int16") == 0) {
-                push_token(&tokens, &count, TOKEN_INT16, NULL);
+                push_token(&ctx, TOKEN_INT16, NULL);
                 free(buf);
             } else if (strcmp(buf, "int32") == 0) {
-                push_token(&tokens, &count, TOKEN_INT32, NULL);
+                push_token(&ctx, TOKEN_INT32, NULL);
                 free(buf);
             } else if (strcmp(buf, "int64") == 0) {
-                push_token(&tokens, &count, TOKEN_INT64, NULL);
+                push_token(&ctx, TOKEN_INT64, NULL);
                 free(buf);
             } else if (strcmp(buf, "uint8") == 0) {
-                push_token(&tokens, &count, TOKEN_UINT8, NULL);
+                push_token(&ctx, TOKEN_UINT8, NULL);
                 free(buf);
             } else if (strcmp(buf, "uint16") == 0) {
-                push_token(&tokens, &count, TOKEN_UINT16, NULL);
+                push_token(&ctx, TOKEN_UINT16, NULL);
                 free(buf);
             } else if (strcmp(buf, "uint32") == 0) {
-                push_token(&tokens, &count, TOKEN_UINT32, NULL);
+                push_token(&ctx, TOKEN_UINT32, NULL);
                 free(buf);
             } else if (strcmp(buf, "uint64") == 0) {
-                push_token(&tokens, &count, TOKEN_UINT64, NULL);
+                push_token(&ctx, TOKEN_UINT64, NULL);
                 free(buf);
             } else if (strcmp(buf, "char") == 0) {
-                push_token(&tokens, &count, TOKEN_CHAR, NULL);
+                push_token(&ctx, TOKEN_CHAR, NULL);
                 free(buf);
             } else if (strcmp(buf, "alloc") == 0) {
-                push_token(&tokens, &count, TOKEN_ALLOC, NULL);
+                push_token(&ctx, TOKEN_ALLOC, NULL);
                 free(buf);
             } else if (strcmp(buf, "free") == 0) {
-                push_token(&tokens, &count, TOKEN_FREE, NULL);
+                push_token(&ctx, TOKEN_FREE, NULL);
                 free(buf);
             } else {
-                push_token(&tokens, &count, TOKEN_IDENT, buf);
+                push_token(&ctx, TOKEN_IDENT, buf);
             }
         }
         else if (isdigit(c) || (c == '-' && isdigit(c_next))) {
-            int start = i;
+            int start = ctx.str_index;
             int len = 0;
 
             // handle optional negative sign
@@ -198,74 +242,96 @@ Token *tokenise(const char *str, int *out_count) {
                 len++;
             }
 
-            while (isdigit(str[i + len]))
+            while (isdigit(str[ctx.str_index + len]))
                 len++;
 
             char *buf = copy_lexme(str, start, len);
-            i += len - 1;
-
-            push_token(&tokens, &count, TOKEN_INT_LIT, buf);
+            ctx.str_index += len - 1;
+            push_token(&ctx, TOKEN_INT_LIT, buf);
         } 
         else if (c == ';') {
-            push_token(&tokens, &count, TOKEN_SEMI, NULL);
+            push_token(&ctx, TOKEN_SEMI, NULL);
         } else if (c == '+') {
-            push_token(&tokens, &count, TOKEN_PLUS, NULL);
+            push_token(&ctx, TOKEN_PLUS, NULL);
         } else if (c == '-') {
-            push_token(&tokens, &count, TOKEN_MINUS, NULL);
+            push_token(&ctx, TOKEN_MINUS, NULL);
         } else if (c == '*') {
-            push_token(&tokens, &count, TOKEN_ASTERISK, NULL);
-        } else if (c == '/' && str[i + 1] == '/') {
+            push_token(&ctx, TOKEN_ASTERISK, NULL);
+        } else if (c == '/' && str[ctx.str_index + 1] == '/') {
             // comment: skip until end of line
-            i += 2;
-            while (i < strlen(str) && str[i] != '\n') {
-                i++;
+            ctx.str_index += 2;
+            while (ctx.str_index < strlen(str) && str[ctx.str_index] != '\n') {
+                ctx.str_index++;
             }
+            ctx.str_index++;
             continue;
         } else if (c == '/') {
-            push_token(&tokens, &count, TOKEN_FSLASH, NULL);
-        } else if (c == '=' && str[i + 1] == '=') {
-            push_token(&tokens, &count, TOKEN_DOUBLE_EQUALS, NULL);
-            i++;
+            push_token(&ctx, TOKEN_FSLASH, NULL);
+        } else if (c == '=' && str[ctx.str_index + 1] == '=') {
+            push_token(&ctx, TOKEN_DOUBLE_EQUALS, NULL);
+            ctx.str_index++;
         } else if (c == '=') {
-            push_token(&tokens, &count, TOKEN_EQUALS, NULL);
+            push_token(&ctx, TOKEN_EQUALS, NULL);
         } else if (c == '(') {
-            push_token(&tokens, &count, TOKEN_OPEN_PAREN, NULL);
+            push_token(&ctx, TOKEN_OPEN_PAREN, NULL);
         } else if (c == ')') {
-            push_token(&tokens, &count, TOKEN_CLOSE_PAREN, NULL);
+            push_token(&ctx, TOKEN_CLOSE_PAREN, NULL);
         } else if (c == '{') {
-            push_token(&tokens, &count, TOKEN_OPEN_CURLY, NULL);
+            push_token(&ctx, TOKEN_OPEN_CURLY, NULL);
         } else if (c == '}') {
-            push_token(&tokens, &count, TOKEN_CLOSE_CURLY, NULL);
-        } else if (c == '>' && str[i + 1] == '=') {
-            push_token(&tokens, &count, TOKEN_GTE, NULL);
-            i++;
-        } else if (c == '<' && str[i + 1] == '=') {
-            push_token(&tokens, &count, TOKEN_LTE, NULL);
-            i++;
+            push_token(&ctx, TOKEN_CLOSE_CURLY, NULL);
+        } else if (c == '>' && str[ctx.str_index + 1] == '=') {
+            push_token(&ctx, TOKEN_GTE, NULL);
+            ctx.str_index++;
+        } else if (c == '<' && str[ctx.str_index + 1] == '=') {
+            push_token(&ctx, TOKEN_LTE, NULL);
+            ctx.str_index++;
         } else if (c == '>') {
-            push_token(&tokens, &count, TOKEN_GT, NULL);
+            push_token(&ctx, TOKEN_GT, NULL);
         } else if (c == '<') {
-            push_token(&tokens, &count, TOKEN_LT, NULL);
+            push_token(&ctx, TOKEN_LT, NULL);
         } else if (c == '&') {
-            push_token(&tokens, &count, TOKEN_AMPERSAND, NULL);
+            push_token(&ctx, TOKEN_AMPERSAND, NULL);
         } else if (c == '|') {
-            push_token(&tokens, &count, TOKEN_PIPE, NULL);
+            push_token(&ctx, TOKEN_PIPE, NULL);
         } else if (c == '[') {
-            push_token(&tokens, &count, TOKEN_OPEN_SQUARE, NULL);
+            push_token(&ctx, TOKEN_OPEN_SQUARE, NULL);
         } else if (c == ']') {
-            push_token(&tokens, &count, TOKEN_CLOSE_SQUARE, NULL);
+            push_token(&ctx, TOKEN_CLOSE_SQUARE, NULL);
         } else if (c == ',') {
-            push_token(&tokens, &count, TOKEN_COMMA, NULL);
+            push_token(&ctx, TOKEN_COMMA, NULL);
+        } else if (c == '\'') {
+            push_token(&ctx, TOKEN_SINGLE_QUOTE, NULL);
+            ctx.str_index++;
+            lex_char(&ctx);
+            if (str[ctx.str_index] != '\'') {
+                fprintf(stderr, "Expected closing single quote for character literal\n");
+                exit(EXIT_FAILURE);
+            }
+            push_token(&ctx, TOKEN_SINGLE_QUOTE, NULL);
+        } else if (c == '\"') {
+            push_token(&ctx, TOKEN_DOUBLE_QUOTE, NULL);
+            ctx.str_index++;
+            while (ctx.str_index < strlen(str) && str[ctx.str_index] != '"') {
+                lex_char(&ctx);
+            }
+            if (str[ctx.str_index] != '"') {
+                fprintf(stderr, "Expected closing double quote for string literal\n");
+                exit(EXIT_FAILURE);
+            }
+            push_token(&ctx, TOKEN_DOUBLE_QUOTE, NULL);
         }
         else if (isspace(c)) {
+            ctx.str_index++;
             continue;
         }
         else {
             fprintf(stderr, "\"%c\" is not valid here\n", c);
             exit(EXIT_FAILURE);
         }
+        ctx.str_index++;
     }
 
-    *out_count = count;
-    return tokens;
+    *out_count = ctx.token_count;
+    return ctx.tokens;
 }
