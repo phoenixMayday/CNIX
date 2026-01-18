@@ -428,24 +428,24 @@ NodeTerm *parse_term(ParserCtx *ctx) {
 
         return term_base;
     }
-    else if (is_type_token(peek->type)) {
-        // type cast: type(expr)
-        TokenType target_type = peek->type;
-        increment_pos(ctx); // consume type token
-        expect_token(TOKEN_OPEN_PAREN, ctx);
+    // else if (is_type_token(peek->type)) {
+    //     // type cast: type(expr)
+    //     TokenType target_type = peek->type;
+    //     increment_pos(ctx); // consume type token
+    //     expect_token(TOKEN_OPEN_PAREN, ctx);
 
-        NodeTermTypeCast *type_cast_node = malloc(sizeof(NodeTermTypeCast));
-        type_cast_node->target_type = target_type;
-        type_cast_node->expr = parse_expr(0, ctx);
+    //     NodeTermTypeCast *type_cast_node = malloc(sizeof(NodeTermTypeCast));
+    //     type_cast_node->target_type = target_type;
+    //     type_cast_node->expr = parse_expr(0, ctx);
 
-        expect_token(TOKEN_CLOSE_PAREN, ctx);
+    //     expect_token(TOKEN_CLOSE_PAREN, ctx);
 
-        NodeTerm *term_base = malloc(sizeof(NodeTerm));
-        term_base->kind = NODE_TERM_TYPE_CAST;
-        term_base->as.type_cast = type_cast_node;
+    //     NodeTerm *term_base = malloc(sizeof(NodeTerm));
+    //     term_base->kind = NODE_TERM_TYPE_CAST;
+    //     term_base->as.type_cast = type_cast_node;
 
-        return term_base;
-    }
+    //     return term_base;
+    // }
     else {
         fprintf(stderr, "Unexpected token in term\n");
         exit(EXIT_FAILURE);
