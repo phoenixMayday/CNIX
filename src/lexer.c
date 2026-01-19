@@ -46,29 +46,30 @@ typedef enum {
     TOKEN_CLOSE_SQUARE,
     TOKEN_COMMA,
     TOKEN_QUOTE,
-    TOKEN_CHAR_LIT
+    TOKEN_CHAR_LIT,
+    TOKEN_COLON
 } TokenType;
 
-static int is_type_token(TokenType token_type) {
-    switch (token_type) {
-        case TOKEN_BYTE:
-        case TOKEN_WORD:
-        case TOKEN_LONG:
-        case TOKEN_QWORD:
-        case TOKEN_INT8:
-        case TOKEN_INT16:
-        case TOKEN_INT32:
-        case TOKEN_INT64:
-        case TOKEN_UINT8:
-        case TOKEN_UINT16:
-        case TOKEN_UINT32:
-        case TOKEN_UINT64:
-        case TOKEN_CHAR:
-            return 1;
-        default:
-            return 0;
-    }
-}
+// static int is_type_token(TokenType token_type) {
+//     switch (token_type) {
+//         case TOKEN_BYTE:
+//         case TOKEN_WORD:
+//         case TOKEN_LONG:
+//         case TOKEN_QWORD:
+//         case TOKEN_INT8:
+//         case TOKEN_INT16:
+//         case TOKEN_INT32:
+//         case TOKEN_INT64:
+//         case TOKEN_UINT8:
+//         case TOKEN_UINT16:
+//         case TOKEN_UINT32:
+//         case TOKEN_UINT64:
+//         case TOKEN_CHAR:
+//             return 1;
+//         default:
+//             return 0;
+//     }
+// }
 
 static int get_precedence(int token_type) {
     switch (token_type) {
@@ -299,7 +300,10 @@ Token *tokenise(const char *str, int *out_count) {
             push_token(&ctx, TOKEN_CLOSE_SQUARE, NULL);
         } else if (c == ',') {
             push_token(&ctx, TOKEN_COMMA, NULL);
-        } else if (c == '\'') {
+        } else if (c == ':') {
+            push_token(&ctx, TOKEN_COLON, NULL);
+        }
+        else if (c == '\'') {
             ctx.str_index++;
             lex_char(&ctx);
             if (str[ctx.str_index] != '\'') {

@@ -35,11 +35,12 @@ typedef enum {
     NODE_TERM_PAREN,
     NODE_TERM_ADDR_OF,
     NODE_TERM_DEREF,
-    NODE_TERM_ARRAY_INDEX,
+    NODE_TERM_INDEX,
+    NODE_TERM_SLICE,
     NODE_TERM_ALLOC,
     NODE_TERM_FREE,
     NODE_TERM_ARRAY_LIT,
-    NODE_TERM_TYPE_CAST
+    // NODE_TERM_TYPE_CAST
 } NodeTermKind;
 
 typedef struct {
@@ -69,7 +70,12 @@ typedef struct {
 typedef struct {
     Token ident;
     NodeExpr *index;
-} NodeTermArrayIndex;
+} NodeTermIndex;
+
+typedef struct {
+    NodeExpr *start;
+    NodeExpr *end;
+} NodeTermSlice;
 
 typedef struct {
     NodeExpr *size;
@@ -86,10 +92,10 @@ typedef struct {
     NodeExpr **elements;
 } NodeTermArrayLit;
 
-typedef struct {
-    TokenType target_type;
-    NodeExpr *expr;
-} NodeTermTypeCast;
+// typedef struct {
+//     TokenType target_type;
+//     NodeExpr *expr;
+// } NodeTermTypeCast;
 
 typedef struct {
     NodeTermKind kind;
@@ -100,11 +106,12 @@ typedef struct {
         NodeTermParen *paren;
         NodeTermAddrOf *addr_of;
         NodeTermDeref *deref;
-        NodeTermArrayIndex *array_index;
+        NodeTermIndex *index;
+        NodeTermSlice *slice;
         NodeTermAlloc *alloc;
         NodeTermFree *free_ptr;
         NodeTermArrayLit *array_lit;
-        NodeTermTypeCast *type_cast;
+        // NodeTermTypeCast *type_cast;
     } as;
 } NodeTerm;
 
@@ -215,17 +222,17 @@ typedef struct {
 
 
 NodeTerm *parse_term(ParserCtx *ctx) {
+    NodeTerm *term_base = malloc(sizeof(NodeTerm));
+
     Token *peek = &ctx->tokens[ctx->current_pos];
     if (peek->type == TOKEN_INT_LIT) {
         NodeTermIntLit *int_lit_node = malloc(sizeof(NodeTermIntLit));
         int_lit_node->int_lit = *peek;
 
-        NodeTerm *term_base = malloc(sizeof(NodeTerm));
         term_base->kind = NODE_TERM_INT_LIT;
         term_base->as.int_lit = int_lit_node;
 
         increment_pos(ctx);
-        return term_base;
     } 
     else if (peek->type == TOKEN_AMPERSAND) {
         // address-of operator: &variable
@@ -242,11 +249,8 @@ NodeTerm *parse_term(ParserCtx *ctx) {
         NodeTermAddrOf *addr_of_node = malloc(sizeof(NodeTermAddrOf));
         addr_of_node->ident = ident_token;
         
-        NodeTerm *term_base = malloc(sizeof(NodeTerm));
         term_base->kind = NODE_TERM_ADDR_OF;
         term_base->as.addr_of = addr_of_node;
-        
-        return term_base;
     }
     else if (peek->type == TOKEN_ASTERISK) {
         // dereference operator: *expr
@@ -255,11 +259,8 @@ NodeTerm *parse_term(ParserCtx *ctx) {
         NodeTermDeref *deref_node = malloc(sizeof(NodeTermDeref));
         deref_node->expr = parse_expr(0, ctx);
         
-        NodeTerm *term_base = malloc(sizeof(NodeTerm));
         term_base->kind = NODE_TERM_DEREF;
         term_base->as.deref = deref_node;
-        
-        return term_base;
     }
     else if (peek->type == TOKEN_ALLOC) {
         // alloc(size)
@@ -272,11 +273,8 @@ NodeTerm *parse_term(ParserCtx *ctx) {
         
         expect_token(TOKEN_CLOSE_PAREN, ctx);
         
-        NodeTerm *term_base = malloc(sizeof(NodeTerm));
         term_base->kind = NODE_TERM_ALLOC;
         term_base->as.alloc = alloc_node;
-        
-        return term_base;
     }
     else if (peek->type == TOKEN_FREE) {
         // free(ptr, size)
@@ -292,42 +290,54 @@ NodeTerm *parse_term(ParserCtx *ctx) {
         
         expect_token(TOKEN_CLOSE_PAREN, ctx);
         
-        NodeTerm *term_base = malloc(sizeof(NodeTerm));
         term_base->kind = NODE_TERM_FREE;
         term_base->as.free_ptr = free_node;
-        
-        return term_base;
     }
     else if (peek->type == TOKEN_IDENT) {
         Token ident_token = *peek;
         increment_pos(ctx);
         
-        // check indexing array: ident[expr]
+        // check if indexing or slicing
         if (ctx->tokens[ctx->current_pos].type == TOKEN_OPEN_SQUARE) {
             increment_pos(ctx);
+
+            NodeExpr *index_expr = parse_expr(0, ctx);
             
-            NodeTermArrayIndex *array_index_node = malloc(sizeof(NodeTermArrayIndex));
-            array_index_node->ident = ident_token;
-            array_index_node->index = parse_expr(0, ctx);
+            if (ctx->tokens[ctx->current_pos].type == TOKEN_COLON) {
+                // slice: ident[start:end]
+                increment_pos(ctx); // consume ':'
+
+                NodeExpr *end_expr = parse_expr(0, ctx);
+
+                expect_token(TOKEN_CLOSE_SQUARE, ctx);
+
+                NodeTermSlice *slice_node = malloc(sizeof(NodeTermSlice));
+                slice_node->start = index_expr;
+                slice_node->end = end_expr;
+
+                term_base->kind = NODE_TERM_SLICE;
+                term_base->as.slice = slice_node;
+                return term_base;
+            }
+
+            // index: ident[expr]
+            NodeTermIndex *index_node = malloc(sizeof(NodeTermIndex));
+            index_node->ident = ident_token;
+            index_node->index = index_expr;
             
             expect_token(TOKEN_CLOSE_SQUARE, ctx);
             
-            NodeTerm *term_base = malloc(sizeof(NodeTerm));
-            term_base->kind = NODE_TERM_ARRAY_INDEX;
-            term_base->as.array_index = array_index_node;
-            
-            return term_base;
-        } else {
-            // regular identifier
-            NodeTermIdent *ident_node = malloc(sizeof(NodeTermIdent));
-            ident_node->ident = ident_token;
-            
-            NodeTerm *term_base = malloc(sizeof(NodeTerm));
-            term_base->kind = NODE_TERM_IDENT;
-            term_base->as.ident = ident_node;
-            
+            term_base->kind = NODE_TERM_INDEX;
+            term_base->as.index = index_node;
             return term_base;
         }
+
+        // regular identifier
+        NodeTermIdent *ident_node = malloc(sizeof(NodeTermIdent));
+        ident_node->ident = ident_token;
+        
+        term_base->kind = NODE_TERM_IDENT;
+        term_base->as.ident = ident_node;
     } 
     else if (peek->type == TOKEN_OPEN_PAREN) {
         increment_pos(ctx); // consume '('
@@ -338,11 +348,8 @@ NodeTerm *parse_term(ParserCtx *ctx) {
 
         expect_token(TOKEN_CLOSE_PAREN, ctx);
 
-        NodeTerm *term_base = malloc(sizeof(NodeTerm));
         term_base->kind = NODE_TERM_PAREN;
         term_base->as.paren = paren_node;
-
-        return term_base;
     } 
     else if (peek->type == TOKEN_OPEN_CURLY) {
         // array literal: { elem1, elem2, ... }
@@ -370,11 +377,8 @@ NodeTerm *parse_term(ParserCtx *ctx) {
         
         expect_token(TOKEN_CLOSE_CURLY, ctx);
         
-        NodeTerm *term_base = malloc(sizeof(NodeTerm));
         term_base->kind = NODE_TERM_ARRAY_LIT;
         term_base->as.array_lit = array_lit_node;
-        
-        return term_base;
     }
     else if (peek->type == TOKEN_CHAR_LIT) {
         // character literal
@@ -383,11 +387,8 @@ NodeTerm *parse_term(ParserCtx *ctx) {
         NodeTermCharLit *char_lit_node = malloc(sizeof(NodeTermCharLit));
         char_lit_node->char_lit = ctx->tokens[ctx->current_pos - 1];  // -1 because `expect_token` incremented
 
-        NodeTerm *term_base = malloc(sizeof(NodeTerm));
         term_base->kind = NODE_TERM_CHAR_LIT;
         term_base->as.char_lit = char_lit_node;
-
-        return term_base;
     }
     else if (peek->type == TOKEN_QUOTE) {
         // string literal: "string"
@@ -422,34 +423,30 @@ NodeTerm *parse_term(ParserCtx *ctx) {
         string_node->element_count = char_token_count;
         string_node->elements = char_terms;
 
-        NodeTerm *term_base = malloc(sizeof(NodeTerm));
         term_base->kind = NODE_TERM_ARRAY_LIT;
         term_base->as.array_lit = string_node;
-
-        return term_base;
     }
-    else if (is_type_token(peek->type)) {
-        // type cast: type(expr)
-        TokenType target_type = peek->type;
-        increment_pos(ctx); // consume type token
-        expect_token(TOKEN_OPEN_PAREN, ctx);
+    // else if (is_type_token(peek->type)) {
+    //     // type cast: type(expr)
+    //     TokenType target_type = peek->type;
+    //     increment_pos(ctx); // consume type token
+    //     expect_token(TOKEN_OPEN_PAREN, ctx);
 
-        NodeTermTypeCast *type_cast_node = malloc(sizeof(NodeTermTypeCast));
-        type_cast_node->target_type = target_type;
-        type_cast_node->expr = parse_expr(0, ctx);
+    //     NodeTermTypeCast *type_cast_node = malloc(sizeof(NodeTermTypeCast));
+    //     type_cast_node->target_type = target_type;
+    //     type_cast_node->expr = parse_expr(0, ctx);
 
-        expect_token(TOKEN_CLOSE_PAREN, ctx);
+    //     expect_token(TOKEN_CLOSE_PAREN, ctx);
 
-        NodeTerm *term_base = malloc(sizeof(NodeTerm));
-        term_base->kind = NODE_TERM_TYPE_CAST;
-        term_base->as.type_cast = type_cast_node;
+    //     term_base->kind = NODE_TERM_TYPE_CAST;
+    //     term_base->as.type_cast = type_cast_node;
+    // }
+    // else {
+    //     fprintf(stderr, "Unexpected token in term\n");
+    //     exit(EXIT_FAILURE);
+    // }
 
-        return term_base;
-    }
-    else {
-        fprintf(stderr, "Unexpected token in term\n");
-        exit(EXIT_FAILURE);
-    }
+    return term_base;
 }
 
 NodeExpr *parse_expr(int min_prec, ParserCtx *ctx) {
@@ -551,8 +548,9 @@ NodeScope *parse_scope(ParserCtx *ctx) {
 }
 
 NodeStmt *parse_stmt(ParserCtx *ctx) {
-    Token *current = &ctx->tokens[ctx->current_pos];
+    NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
 
+    Token *current = &ctx->tokens[ctx->current_pos];
     if (current->type == TOKEN_EXIT) {
         increment_pos(ctx);
 
@@ -571,14 +569,10 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         NodeStmtExit *stmt_exit = malloc(sizeof(NodeStmtExit));
         stmt_exit->expr = expr;
 
-        NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
         stmt_base->kind = NODE_STMT_EXIT;
         stmt_base->as.stmt_exit = stmt_exit;
-
-        return stmt_base;
     } 
-    
-    if (current->type == TOKEN_BYTE || current->type == TOKEN_WORD ||
+    else if (current->type == TOKEN_BYTE || current->type == TOKEN_WORD ||
         current->type == TOKEN_LONG || current->type == TOKEN_QWORD ||
         current->type == TOKEN_INT8 || current->type == TOKEN_INT16 ||
         current->type == TOKEN_INT32 || current->type == TOKEN_INT64 ||
@@ -632,13 +626,10 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         stmt_assign->is_pointer = is_pointer;
         stmt_assign->is_stack_array = is_stack_array;
 
-        NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
         stmt_base->kind = NODE_STMT_ASSIGN;
         stmt_base->as.stmt_assign = stmt_assign;
-        return stmt_base;
     } 
-    
-    if (current->type == TOKEN_IDENT) {
+    else if (current->type == TOKEN_IDENT) {
         Token ident_token = *current;
         increment_pos(ctx);
 
@@ -659,15 +650,13 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
             stmt_assign_heap_array_element->ident = ident_token;
             stmt_assign_heap_array_element->index = index_expr;
             stmt_assign_heap_array_element->expr = value_expr;
-            
-            NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
+
             stmt_base->kind = NODE_STMT_ASSIGN_HEAP_ARRAY_ELEMENT;
             stmt_base->as.stmt_assign_heap_array_element = stmt_assign_heap_array_element;
-            
             return stmt_base;
         }
 
-        // regular reassignment
+        // else, regular reassignment
         expect_token(TOKEN_EQUALS, ctx);
 
         // expect expression
@@ -680,28 +669,20 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         stmt_reassign->ident = ident_token;
         stmt_reassign->expr = expr;
 
-        NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
         stmt_base->kind = NODE_STMT_REASSIGN;
         stmt_base->as.stmt_reassign = stmt_reassign;
-
-        return stmt_base;
     } 
-    
-    if (current->type == TOKEN_OPEN_CURLY) {
+    else if (current->type == TOKEN_OPEN_CURLY) {
         // this is kinda messy with `NodeScope` and `NodeStmtScope` but oh well
         NodeScope *scope = parse_scope_block(ctx);
 
         NodeStmtScope *stmt_scope = malloc(sizeof(NodeStmtScope));
         stmt_scope->scope = scope;
 
-        NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
         stmt_base->kind = NODE_STMT_SCOPE;
         stmt_base->as.stmt_scope = stmt_scope;
-
-        return stmt_base;
     }
-    
-    if (current->type == TOKEN_IF) {
+    else if (current->type == TOKEN_IF) {
         increment_pos(ctx);
 
         // expect expression in parentheses
@@ -725,14 +706,10 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
             stmt_if->else_scope = else_scope;
         }
 
-        NodeStmt *stmt_base = malloc(sizeof(NodeStmt));
         stmt_base->kind = NODE_STMT_IF;
         stmt_base->as.stmt_if = stmt_if;
-
-        return stmt_base;
     }
-
-    if (current->type == TOKEN_FOR) {
+    else if (current->type == TOKEN_FOR) {
         increment_pos(ctx);
 
         expect_token(TOKEN_OPEN_PAREN, ctx);
@@ -786,15 +763,16 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         NodeStmtScope *stmt_scope_outer = malloc(sizeof(NodeStmtScope));
         stmt_scope_outer->scope = scope_outer;
 
-        NodeStmt *stmt_base_outer = malloc(sizeof(NodeStmt));
-        stmt_base_outer->kind = NODE_STMT_SCOPE;
-        stmt_base_outer->as.stmt_scope = stmt_scope_outer;
-
-        return stmt_base_outer;
+        // outer base statement
+        stmt_base->kind = NODE_STMT_SCOPE;
+        stmt_base->as.stmt_scope = stmt_scope_outer;
+    }
+    else {
+        fprintf(stderr, "Unexpected token in statement: %d\n", current->type);
+        exit(EXIT_FAILURE);
     }
 
-    fprintf(stderr, "Unexpected token in statement\n");
-    exit(EXIT_FAILURE);
+    return stmt_base;
 }
 
 NodeProg *parse_prog(Token **tokens, int token_count) {

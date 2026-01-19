@@ -38,16 +38,17 @@ make run FILE=./examples/example.cnix
 
 [term] = integer_literal
        | identifier
-       | identifier[[expression]]        // array indexing
+       | identifier[[expression]]               // array indexing / many-item pointer dereferencing
        | ([expression])
-       | &identifier                     // address-of
-       | *[expression]                   // dereference
-       | alloc([expression])             // heap allocation
-       | free([expression])              // heap deallocation
-       | {[expression-list]}             // stack array allocation
-       | [type]([expression])            // type conversion
-       | 'char_lit'                      // character
-       | "[string]"                      // string
+       | &identifier                            // address-of
+       | *[expression]                          // dereference
+       | alloc([expression])                    // heap allocation
+       | free([expression])                     // heap deallocation
+       | {[expression-list]}                    // stack array allocation
+       | [type]([expression])                   // type conversion
+       | 'char_lit'                             // character
+       | "[string]"                             // string
+       | identifier[[expression]:[expression]]  // slicing
 
 [expression-list] = [expression]
                   | [expression], [expression-list]

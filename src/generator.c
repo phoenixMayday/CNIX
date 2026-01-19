@@ -296,18 +296,18 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             "    movq (%%rax), %%rbx\n"
             "    pushq %%rbx\n");
     }
-    else if (term->kind == NODE_TERM_ARRAY_INDEX) {
-        // array indexing: arr[index]
-        int var_index = get_var_index(term->as.array_index->ident.value, ctx);
+    else if (term->kind == NODE_TERM_INDEX) {
+        // indexing: arr[index]
+        int var_index = get_var_index(term->as.index->ident.value, ctx);
         if (var_index == -1) {
-            fprintf(stderr, "Undefined variable \"%s\"\n", term->as.array_index->ident.value);
+            fprintf(stderr, "Undefined variable \"%s\"\n", term->as.index->ident.value);
             exit(EXIT_FAILURE);
         }
         
         Var *var = &ctx->vars[var_index];
         if (var->element_width == 0) {
             fprintf(stderr, "Cannot index non-array variable \"%s\"\n", 
-                    term->as.array_index->ident.value);
+                    term->as.index->ident.value);
             exit(EXIT_FAILURE);
         }
         
@@ -321,7 +321,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             size_t array_start_offset = array_end_offset + var->total_width - element_size;
             
             // generate index expression
-            gen_expr(term->as.array_index->index, ctx);
+            gen_expr(term->as.index->index, ctx);
             
             // pop index, calculate address and load value
             if (element_size == QWORD || element_size == LONG) {
@@ -333,7 +333,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
                     "    subq %%rbx, %%rax\n"        // subtract index offset
                     "    mov%s (%%rsp, %%rax), %s\n" // load value
                     "    pushq %%rcx\n",             // push result
-                    term->as.array_index->ident.value,
+                    term->as.index->ident.value,
                     element_size,
                     array_start_offset,
                     get_mov_suffix(element_size),
@@ -347,7 +347,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
                     "    subq %%rbx, %%rax\n"             // subtract index offset
                     "    movz%sq (%%rsp, %%rax), %%rcx\n" // load value with zero-extension
                     "    pushq %%rcx\n",                  // push result
-                    term->as.array_index->ident.value,
+                    term->as.index->ident.value,
                     element_size,
                     array_start_offset,
                     get_mov_suffix(element_size));
@@ -358,12 +358,12 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             appendf(&ctx->output,
                 "    # heap array access: %s[index] (load base pointer)\n"
                 "    pushq %zu(%%rsp)\n",
-                term->as.array_index->ident.value,
+                term->as.index->ident.value,
                 offset);
             ctx->stack_size += QWORD;
             
             // generate index expression
-            gen_expr(term->as.array_index->index, ctx);
+            gen_expr(term->as.index->index, ctx);
             
             // pop index and pointer, calculate address and load value
             if (element_size == QWORD || element_size == LONG) {
@@ -376,7 +376,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
                     "    addq %%rbx, %%rax\n"       // add to pointer
                     "    mov%s (%%rax), %s\n"       // load value (into rcx or ecx)
                     "    pushq %%rcx\n",            // push result
-                    term->as.array_index->ident.value,
+                    term->as.index->ident.value,
                     element_size,
                     get_mov_suffix(element_size),
                     get_register_for_width(element_size, 'c'));
@@ -390,7 +390,7 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
                     "    addq %%rbx, %%rax\n"       // add to pointer
                     "    movz%sq (%%rax), %%rcx\n"  // load value with zero-extension
                     "    pushq %%rcx\n",            // push result
-                    term->as.array_index->ident.value,
+                    term->as.index->ident.value,
                     element_size,
                     get_mov_suffix(element_size));
             }
