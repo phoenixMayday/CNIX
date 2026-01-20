@@ -155,7 +155,7 @@ typedef enum {
     NODE_STMT_EXIT,
     NODE_STMT_ASSIGN,
     NODE_STMT_REASSIGN,
-    NODE_STMT_ASSIGN_HEAP_ARRAY_ELEMENT,
+    NODE_STMT_ASSIGN_INDEXABLE_ELEMENT,
     NODE_STMT_SCOPE,
     NODE_STMT_IF,
     NODE_STMT_FOR
@@ -170,7 +170,7 @@ typedef struct {
     NodeExpr *expr;
     TokenType var_type;
     int is_pointer;
-    int is_stack_array;
+    int is_array;
 } NodeStmtAssignVar;
 
 typedef struct {
@@ -182,7 +182,7 @@ typedef struct {
     Token ident;
     NodeExpr *index;
     NodeExpr *expr;
-} NodeStmtAssignHeapArrayElement;
+} NodeStmtAssignIndexableElement;
 
 typedef struct {
     NodeScope *scope;
@@ -207,7 +207,7 @@ typedef struct NodeStmt {
         NodeStmtExit *stmt_exit;
         NodeStmtAssignVar *stmt_assign;
         NodeStmtReassignVar *stmt_reassign;
-        NodeStmtAssignHeapArrayElement *stmt_assign_heap_array_element;
+        NodeStmtAssignIndexableElement *stmt_assign_indexable_element;
         NodeStmtScope *stmt_scope;
         NodeStmtIf *stmt_if;
         NodeStmtFor *stmt_for;
@@ -584,15 +584,15 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         increment_pos(ctx);
         
         // check if pointer type (* after type)
-        // or stack array ([] after type)
+        // or array ([] after type)
         int is_pointer = 0;
-        int is_stack_array = 0;
+        int is_array = 0;
 
         if (ctx->tokens[ctx->current_pos].type == TOKEN_ASTERISK) {
             is_pointer = 1;
             increment_pos(ctx); // consume '*'
         } else if (ctx->tokens[ctx->current_pos].type == TOKEN_OPEN_SQUARE) {
-            is_stack_array = 1;
+            is_array = 1;
             increment_pos(ctx);                    // consume '['
             expect_token(TOKEN_CLOSE_SQUARE, ctx); // consume ']'
         }
@@ -608,8 +608,8 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         // expect expression
         NodeExpr *expr = parse_expr(0, ctx);
 
-        // // set element_type of stack array if applicable
-        // if (is_stack_array) {
+        // // set element_type of array if applicable
+        // if (is_array) {
         //     if (expr->kind == NODE_EXPR_TERM && 
         //         expr->as.term->kind == NODE_TERM_ARRAY_LIT) {
         //         expr->as.term->as.array_lit->element_type = var_type;
@@ -624,7 +624,7 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         stmt_assign->expr = expr;
         stmt_assign->var_type = var_type;
         stmt_assign->is_pointer = is_pointer;
-        stmt_assign->is_stack_array = is_stack_array;
+        stmt_assign->is_array = is_array;
 
         stmt_base->kind = NODE_STMT_ASSIGN;
         stmt_base->as.stmt_assign = stmt_assign;
@@ -646,13 +646,13 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
             
             expect_token(TOKEN_SEMI, ctx);
             
-            NodeStmtAssignHeapArrayElement *stmt_assign_heap_array_element = malloc(sizeof(NodeStmtAssignHeapArrayElement));
-            stmt_assign_heap_array_element->ident = ident_token;
-            stmt_assign_heap_array_element->index = index_expr;
-            stmt_assign_heap_array_element->expr = value_expr;
+            NodeStmtAssignIndexableElement *stmt_assign_indexable_element = malloc(sizeof(NodeStmtAssignIndexableElement));
+            stmt_assign_indexable_element->ident = ident_token;
+            stmt_assign_indexable_element->index = index_expr;
+            stmt_assign_indexable_element->expr = value_expr;
 
-            stmt_base->kind = NODE_STMT_ASSIGN_HEAP_ARRAY_ELEMENT;
-            stmt_base->as.stmt_assign_heap_array_element = stmt_assign_heap_array_element;
+            stmt_base->kind = NODE_STMT_ASSIGN_INDEXABLE_ELEMENT;
+            stmt_base->as.stmt_assign_indexable_element = stmt_assign_indexable_element;
             return stmt_base;
         }
 

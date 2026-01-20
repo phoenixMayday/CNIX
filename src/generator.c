@@ -15,7 +15,7 @@ typedef struct {
     MemWidth total_width;
     int is_signed;
     int is_pointer;
-    MemWidth element_width; // 0 if not an array
+    MemWidth element_width; // 0 if not indexable
 } Var;
 
 int is_token_signed(TokenType token_type) {
@@ -30,7 +30,11 @@ int is_token_signed(TokenType token_type) {
     }
 }
 
-int is_stack_array(Var *var) {
+int is_indexable(Var *var) {
+    return var->element_width > 0;
+}
+
+int is_array(Var *var) {
     return !var->is_pointer && var->element_width > 0;
 }
 
@@ -180,6 +184,29 @@ static void gen_comparison_op(NodeExpr *lhs, NodeExpr *rhs, const char *op_asm, 
     ctx->stack_size -= QWORD;
 }
 
+// push array/pointer address onto stack
+static void push_indexable_address(Var *var, CodegenCtx *ctx) {
+    size_t var_offset = ctx->stack_size - var->stack_loc;
+    
+    // array: compute address with leaq
+    if (is_array(var)) {
+        appendf(&ctx->output,
+            "    # push stack array address\n"
+            "    leaq %zu(%%rsp), %%rax\n"
+            "    pushq %%rax\n",
+            var_offset);
+    } 
+    // pointer: load pointer value with movq
+    else {
+        appendf(&ctx->output,
+            "    # push pointer value\n"
+            "    movq %zu(%%rsp), %%rax\n"
+            "    pushq %%rax\n",
+            var_offset);
+    }
+    ctx->stack_size += QWORD;
+}
+
 void gen_term(NodeTerm *term, CodegenCtx *ctx) {
     if (term->kind == NODE_TERM_INT_LIT) {
         ctx->stack_size += QWORD;
@@ -213,6 +240,18 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         Var *var = &ctx->vars[var_index];
         MemWidth var_width = var->total_width;
         size_t offset = ctx->stack_size - var->stack_loc;
+
+        // if array: push address, not value
+        if (is_array(var)) {
+            appendf(&ctx->output,
+                "    # load variable `%s` (array address)\n"
+                "    leaq %zu(%%rsp), %%rax\n"
+                "    pushq %%rax\n",
+                term->as.ident->ident.value,
+                offset);
+            ctx->stack_size += QWORD;
+            return;
+        }
         
         if (var_width == QWORD) {
             // can push directly
@@ -313,90 +352,42 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         
         MemWidth element_size = var->element_width;
         
-        if (is_stack_array(var)) {
-            // stack array: calculate address directly from stack offset
-            // Note: elements are pushed in order, so element 0 is at highest address
-            // We need to access from the end: offset = (array_end - element_size) - (index * element_size)
-            size_t array_end_offset = ctx->stack_size - var->stack_loc;
-            size_t array_start_offset = array_end_offset + var->total_width - element_size;
-            
-            // generate index expression
-            gen_expr(term->as.index->index, ctx);
-            
-            // pop index, calculate address and load value
-            if (element_size == QWORD || element_size == LONG) {
-                appendf(&ctx->output,
-                    "    # stack array access: %s[index] (compute address and load)\n"
-                    "    popq %%rbx\n"               // index
-                    "    imulq $%d, %%rbx\n"         // multiply by element size
-                    "    movq $%zu, %%rax\n"         // load array start offset
-                    "    subq %%rbx, %%rax\n"        // subtract index offset
-                    "    mov%s (%%rsp, %%rax), %s\n" // load value
-                    "    pushq %%rcx\n",             // push result
-                    term->as.index->ident.value,
-                    element_size,
-                    array_start_offset,
-                    get_mov_suffix(element_size),
-                    get_register_for_width(element_size, 'c'));
-            } else {
-                appendf(&ctx->output,
-                    "    # stack array access: %s[index] (compute address and load with zero-extend)\n"
-                    "    popq %%rbx\n"                    // index
-                    "    imulq $%d, %%rbx\n"              // multiply by element size
-                    "    movq $%zu, %%rax\n"              // load array start offset
-                    "    subq %%rbx, %%rax\n"             // subtract index offset
-                    "    movz%sq (%%rsp, %%rax), %%rcx\n" // load value with zero-extension
-                    "    pushq %%rcx\n",                  // push result
-                    term->as.index->ident.value,
-                    element_size,
-                    array_start_offset,
-                    get_mov_suffix(element_size));
-            }
-        } else {
-            // heap array: load pointer first
-            size_t offset = ctx->stack_size - ctx->vars[var_index].stack_loc;
+        // push array/pointer address onto stack
+        push_indexable_address(var, ctx);
+        
+        // generate index expression
+        gen_expr(term->as.index->index, ctx);
+        
+        // pop index and address, compute final address and load value
+        if (element_size == QWORD || element_size == LONG) {
             appendf(&ctx->output,
-                "    # heap array access: %s[index] (load base pointer)\n"
-                "    pushq %zu(%%rsp)\n",
+                "    # array access: %s[index]\n"
+                "    popq %%rbx\n"              // index
+                "    popq %%rax\n"              // array/pointer address
+                "    imulq $%d, %%rbx\n"        // multiply by element size
+                "    addq %%rbx, %%rax\n"       // add to address
+                "    mov%s (%%rax), %s\n"       // load value
+                "    pushq %%rcx\n",            // push result
                 term->as.index->ident.value,
-                offset);
-            ctx->stack_size += QWORD;
-            
-            // generate index expression
-            gen_expr(term->as.index->index, ctx);
-            
-            // pop index and pointer, calculate address and load value
-            if (element_size == QWORD || element_size == LONG) {
-                // qwords and longs can be loaded directly
-                appendf(&ctx->output,
-                    "    # heap array access: %s[index] (compute address and load)\n"
-                    "    popq %%rbx\n"              // index
-                    "    popq %%rax\n"              // pointer
-                    "    imulq $%d, %%rbx\n"        // multiply by element size
-                    "    addq %%rbx, %%rax\n"       // add to pointer
-                    "    mov%s (%%rax), %s\n"       // load value (into rcx or ecx)
-                    "    pushq %%rcx\n",            // push result
-                    term->as.index->ident.value,
-                    element_size,
-                    get_mov_suffix(element_size),
-                    get_register_for_width(element_size, 'c'));
-            } else {
-                // byte and word need explicit zero-extension
-                appendf(&ctx->output,
-                    "    # heap array access: %s[index] (compute address and load with zero-extend)\n"
-                    "    popq %%rbx\n"              // index
-                    "    popq %%rax\n"              // pointer
-                    "    imulq $%d, %%rbx\n"        // multiply by element size
-                    "    addq %%rbx, %%rax\n"       // add to pointer
-                    "    movz%sq (%%rax), %%rcx\n"  // load value with zero-extension
-                    "    pushq %%rcx\n",            // push result
-                    term->as.index->ident.value,
-                    element_size,
-                    get_mov_suffix(element_size));
-            }
-            
-            ctx->stack_size -= QWORD;
+                element_size,
+                get_mov_suffix(element_size),
+                get_register_for_width(element_size, 'c'));
+        } else {
+            // byte and word need explicit zero-extension
+            appendf(&ctx->output,
+                "    # array access: %s[index] (zero-extend)\n"
+                "    popq %%rbx\n"              // index
+                "    popq %%rax\n"              // array/pointer address
+                "    imulq $%d, %%rbx\n"        // multiply by element size
+                "    addq %%rbx, %%rax\n"       // add to address
+                "    movz%sq (%%rax), %%rcx\n"  // load value with zero-extension
+                "    pushq %%rcx\n",            // push result
+                term->as.index->ident.value,
+                element_size,
+                get_mov_suffix(element_size));
         }
+        
+        ctx->stack_size -= QWORD;
     }
     else if (term->kind == NODE_TERM_ALLOC) {
         // allocate memory using mmap syscall
@@ -596,8 +587,8 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
                 "    # declare and initialise stack array %s\n",
                 stmt->as.stmt_assign->ident.value);
             
-            // push each element with proper sizing
-            for (int i = 0; i < element_count; i++) {
+            // push each element with proper sizing (in reverse order so they appear forward in memory)
+            for (int i = element_count - 1; i >= 0; i--) {
                 gen_expr(array_lit->elements[i], ctx);
                 
                 // pop qword and store with proper element size
@@ -678,47 +669,45 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
 
         ctx->stack_size -= QWORD;
     }
-    else if (stmt->kind == NODE_STMT_ASSIGN_HEAP_ARRAY_ELEMENT) {
-        int var_index = get_var_index(stmt->as.stmt_assign_heap_array_element->ident.value, ctx);
+    else if (stmt->kind == NODE_STMT_ASSIGN_INDEXABLE_ELEMENT) {
+        int var_index = get_var_index(stmt->as.stmt_assign_indexable_element->ident.value, ctx);
         if (var_index == -1) {
-            fprintf(stderr, "Undefined variable \"%s\"\n", stmt->as.stmt_assign_heap_array_element->ident.value);
+            fprintf(stderr, "Undefined variable \"%s\"\n", stmt->as.stmt_assign_indexable_element->ident.value);
             exit(EXIT_FAILURE);
         }
         
         Var *var = &ctx->vars[var_index];
-        if (!var->is_pointer) {
-            fprintf(stderr, "Cannot index non-pointer variable \"%s\"\n", 
-                    stmt->as.stmt_assign_heap_array_element->ident.value);
+        if (!is_indexable(var)) {
+            fprintf(stderr, "Cannot index non-indexable variable \"%s\"\n", 
+                    stmt->as.stmt_assign_indexable_element->ident.value);
             exit(EXIT_FAILURE);
         }
         
         MemWidth element_size = var->element_width;
         
         // generate index expression
-        gen_expr(stmt->as.stmt_assign_heap_array_element->index, ctx);
+        gen_expr(stmt->as.stmt_assign_indexable_element->index, ctx);
         
         // generate value expression
-        gen_expr(stmt->as.stmt_assign_heap_array_element->expr, ctx);
+        gen_expr(stmt->as.stmt_assign_indexable_element->expr, ctx);
         
-        // load the pointer value
-        size_t offset = ctx->stack_size - ctx->vars[var_index].stack_loc;
+        // push array/pointer address onto stack
+        push_indexable_address(var, ctx);
         
-        // pop value and index, load pointer, calc address and store
         appendf(&ctx->output,
             "    # array assignment: %s[index] = value\n"
+            "    popq %%rcx\n"              // array/pointer address
             "    popq %%rax\n"              // value
             "    popq %%rbx\n"              // index
-            "    movq %zu(%%rsp), %%rcx\n"  // load pointer
-            "    imulq $%d, %%rbx\n"        // multiply by element size
-            "    addq %%rbx, %%rcx\n"       // add to pointer
+            "    imulq $%d, %%rbx\n"        // multiply index by element size
+            "    addq %%rbx, %%rcx\n"       // add to address
             "    mov%s %s, (%%rcx)\n",      // store value at address
-            stmt->as.stmt_assign_heap_array_element->ident.value,
-            offset - 2 * QWORD,
+            stmt->as.stmt_assign_indexable_element->ident.value,
             element_size,
             get_mov_suffix(element_size),
             get_register_for_width(element_size, 'a'));
         
-        ctx->stack_size -= 2 * QWORD;
+        ctx->stack_size -= 3 * QWORD;
     }
     else if (stmt->kind == NODE_STMT_SCOPE) {
         gen_scope(stmt->as.stmt_scope->scope, ctx);
