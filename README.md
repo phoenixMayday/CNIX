@@ -30,7 +30,8 @@ make run FILE=./examples/example.cnix
 
 [pointer-type] = [type] *
 
-[array-type] = [type][]
+[array-type] = [type][] |
+               [type][expression]
 
 [var-type] = [type]
            | [pointer-type]

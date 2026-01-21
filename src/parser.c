@@ -594,6 +594,12 @@ NodeStmt *parse_stmt(ParserCtx *ctx) {
         } else if (ctx->tokens[ctx->current_pos].type == TOKEN_OPEN_SQUARE) {
             is_array = 1;
             increment_pos(ctx);                    // consume '['
+
+            // parse optional size
+            if (ctx->tokens[ctx->current_pos].type != TOKEN_CLOSE_SQUARE) {
+                parse_expr(0, ctx); 
+            }
+
             expect_token(TOKEN_CLOSE_SQUARE, ctx); // consume ']'
         }
         

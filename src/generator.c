@@ -451,6 +451,9 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             gen_expr(term->as.array_lit->elements[i], ctx);
 
             // `gen_expr` pushes qwords, but we want our default behaviour to store bytes (might be easier for strings)
+            appendf(&ctx->output,
+                "    # adjust stack pointer to shrink array element to byte\n"
+                "    addq $3, %%rsp\n");
             ctx->stack_size -= 3 * BYTE;
         }
     }
@@ -558,8 +561,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         }
 
         // check if this is an array literal assignment
-        int is_array_lit = (stmt->as.stmt_assign->expr->kind == NODE_EXPR_TERM &&
-                            stmt->as.stmt_assign->expr->as.term->kind == NODE_TERM_ARRAY_LIT);
+        int is_array_lit = stmt->as.stmt_assign->is_array;
 
         // push new variable to array
         ctx->vars = realloc(ctx->vars, sizeof(Var) * (ctx->var_count + 1));
@@ -570,7 +572,14 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
         set_var_type_from_token(new_var, stmt->as.stmt_assign->var_type, 
                                 stmt->as.stmt_assign->is_pointer);
         
+        // for explicit array assignment, handle it differently from array_lit expressions 
         if (is_array_lit) {
+            if (!(stmt->as.stmt_assign->expr->kind == NODE_EXPR_TERM) ||
+                !(stmt->as.stmt_assign->expr->as.term->kind == NODE_TERM_ARRAY_LIT)) {
+                fprintf(stderr, "Expected array literal for array variable assignment\n");
+                exit(EXIT_FAILURE);
+            }
+
             // for array literals, elements are pushed directly to stack
             NodeTermArrayLit *array_lit = stmt->as.stmt_assign->expr->as.term->as.array_lit;
             int element_count = array_lit->element_count;
@@ -607,28 +616,31 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             
             // stack now has the array elements with proper sizing
             new_var->stack_loc = ctx->stack_size;
-        } else {
-            // regular value assignment
-            gen_expr(stmt->as.stmt_assign->expr, ctx);
-            
-            MemWidth var_width = new_var->total_width;
 
-            // pop expression result and allocate exact space for variable
-            appendf(&ctx->output,
-                "    # declare and initialise variable `%s`\n"
-                "    popq %%rax\n"
-                "    sub $%d, %%rsp\n"
-                "    mov%s %s, (%%rsp)\n",
-                stmt->as.stmt_assign->ident.value,
-                var_width,
-                get_mov_suffix(var_width),
-                get_register_for_width(var_width, 'a'));
-
-            // update stack size: popped 8 bytes, allocated var_width bytes
-            ctx->stack_size = ctx->stack_size - QWORD + var_width;
-            new_var->stack_loc = ctx->stack_size;
+            ctx->var_count++;
+            return;
         }
+
+        // regular value assignment
+        gen_expr(stmt->as.stmt_assign->expr, ctx);
         
+        MemWidth var_width = new_var->total_width;
+
+        // pop expression result and allocate exact space for variable
+        appendf(&ctx->output,
+            "    # declare and initialise variable `%s`\n"
+            "    popq %%rax\n"
+            "    sub $%d, %%rsp\n"
+            "    mov%s %s, (%%rsp)\n",
+            stmt->as.stmt_assign->ident.value,
+            var_width,
+            get_mov_suffix(var_width),
+            get_register_for_width(var_width, 'a'));
+
+        // update stack size: popped 8 bytes, allocated var_width bytes
+        ctx->stack_size = ctx->stack_size - QWORD + var_width;
+        new_var->stack_loc = ctx->stack_size;
+
         ctx->var_count++;
     } 
     else if (stmt->kind == NODE_STMT_REASSIGN) {
