@@ -400,12 +400,7 @@ NodeTerm *parse_term(ParserCtx *ctx) {
 
         Token *peek_inner = &ctx->tokens[ctx->current_pos];
         while (ctx->current_pos < ctx->token_count && peek_inner->type != TOKEN_QUOTE) {
-            // create proper node hierarchy (expr as a term as a char_lit)
-            NodeTerm *char_term_node = parse_term(ctx); // the next term(s) inside the quotes must be char literals
-            
-            NodeExpr *char_expr_node = malloc(sizeof(NodeExpr));
-            char_expr_node->kind = NODE_EXPR_TERM;
-            char_expr_node->as.term = char_term_node;
+            NodeExpr *char_expr_node = parse_expr(0, ctx);
             
             // add char literal to string tokens
             char_terms = realloc(char_terms, sizeof(NodeExpr*) * (char_token_count + 1));

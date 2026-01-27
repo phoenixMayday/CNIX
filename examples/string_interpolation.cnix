@@ -1,0 +1,3 @@
+char[] str = "e{118}a";
+
+exit(str[1]);
