@@ -595,10 +595,6 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             new_var->total_width = element_count * element_size;
             new_var->is_signed = is_token_signed(element_type);
             
-            appendf(&ctx->output,
-                "    # declare and initialise stack array `%s`\n",
-                stmt->as.stmt_assign->ident.value);
-            
             // push each element with proper sizing (in reverse order so they appear forward in memory)
             for (int i = element_count - 1; i >= 0; i--) {
                 gen_expr(array_lit->elements[i], ctx);
