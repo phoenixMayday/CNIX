@@ -1,3 +1,5 @@
-char[] str = "e{118}a";
+byte myVar = 118;
 
-exit(str[1]);
+char[] str = "e{myVar}a";
+
+exit(str[0]);

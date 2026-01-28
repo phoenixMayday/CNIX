@@ -241,6 +241,9 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         MemWidth var_width = var->total_width;
         size_t offset = ctx->stack_size - var->stack_loc;
 
+        printf("Stack size: %zu, Var stack loc: %zu, Offset: %zu\n", 
+               ctx->stack_size, var->stack_loc, offset);
+
         // if array: push address, not value
         if (is_array(var)) {
             appendf(&ctx->output,
@@ -593,7 +596,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
             new_var->is_signed = is_token_signed(element_type);
             
             appendf(&ctx->output,
-                "    # declare and initialise stack array %s\n",
+                "    # declare and initialise stack array `%s`\n",
                 stmt->as.stmt_assign->ident.value);
             
             // push each element with proper sizing (in reverse order so they appear forward in memory)
@@ -611,7 +614,7 @@ void gen_stmt(NodeStmt *stmt, CodegenCtx *ctx) {
                     get_register_for_width(element_size, 'a'));
                 
                 // adjust stack: popped qword but allocated element_size
-                ctx->stack_size += element_size - QWORD;
+                ctx->stack_size = ctx->stack_size - QWORD + element_size;
             }
             
             // stack now has the array elements with proper sizing
