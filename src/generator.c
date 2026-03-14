@@ -460,6 +460,23 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             ctx->stack_size -= 3 * BYTE;
         }
     }
+    else if (term->kind == NODE_TERM_PRINT) {
+        // print with write syscall
+        /*
+        write(
+            fd,     // file descriptor (1 = stdout, 2 = stderr)
+            buf,    // pointer to data
+            count,  // number of bytes to print
+        )
+        returns bytes written in raxs
+        */
+
+        // the content should basically be a fat pointer.
+        // should `print(1, myStr)` automatically get the length of myStr? or should it be something like `print(`1, fat(myStr))`? prob not
+        // variables will have there length remembered by the CodegenCtx, but what about in `print(`1, "hello")`? there should be a 
+        //   temporary fat pointer stack/storage in the CodegenCtx.
+
+    }
     else {
         fprintf(stderr, "Unknown term kind in code generation\n");
         exit(EXIT_FAILURE);

@@ -4,7 +4,6 @@
 #include <ctype.h>
 
 typedef enum {
-    TOKEN_EXIT,
     TOKEN_INT_LIT,
     TOKEN_SEMI,
     TOKEN_PLUS,
@@ -40,14 +39,18 @@ typedef enum {
     TOKEN_UINT32,
     TOKEN_UINT64,
     TOKEN_CHAR,
-    TOKEN_ALLOC,
-    TOKEN_FREE,
     TOKEN_OPEN_SQUARE,
     TOKEN_CLOSE_SQUARE,
     TOKEN_COMMA,
     TOKEN_QUOTE,
     TOKEN_CHAR_LIT,
-    TOKEN_COLON
+    TOKEN_COLON,
+    // built-in functions
+    TOKEN_EXIT,
+    TOKEN_PRINT,
+    TOKEN_ALLOC,
+    TOKEN_FREE,
+    TOKEN_PRINT
 } TokenType;
 
 // static int is_type_token(TokenType token_type) {
@@ -233,6 +236,9 @@ void tokenise(LexerCtx *ctx) {
             free(buf);
         } else if (strcmp(buf, "free") == 0) {
             push_token(ctx, TOKEN_FREE, NULL);
+            free(buf);
+        } else if (strcmp(buf, "print") == 0) {
+            push_token(ctx, TOKEN_PRINT, NULL);
             free(buf);
         } else {
             push_token(ctx, TOKEN_IDENT, buf);

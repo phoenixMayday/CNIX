@@ -40,6 +40,7 @@ typedef enum {
     NODE_TERM_ALLOC,
     NODE_TERM_FREE,
     NODE_TERM_ARRAY_LIT,
+    NODE_TERM_PRINT
     // NODE_TERM_TYPE_CAST
 } NodeTermKind;
 
@@ -92,6 +93,11 @@ typedef struct {
     NodeExpr **elements;
 } NodeTermArrayLit;
 
+typedef struct {
+    NodeExpr *fd;
+    NodeExpr *content;
+} NodeTermPrint;
+
 // typedef struct {
 //     TokenType target_type;
 //     NodeExpr *expr;
@@ -111,6 +117,7 @@ typedef struct {
         NodeTermAlloc *alloc;
         NodeTermFree *free_ptr;
         NodeTermArrayLit *array_lit;
+        NodeTermPrint *print;
         // NodeTermTypeCast *type_cast;
     } as;
 } NodeTerm;
@@ -420,6 +427,24 @@ NodeTerm *parse_term(ParserCtx *ctx) {
 
         term_base->kind = NODE_TERM_ARRAY_LIT;
         term_base->as.array_lit = string_node;
+    }
+    else if (peek->type == TOKEN_PRINT) {
+        // print(output, content)
+        increment_pos(ctx);
+
+        expect_token(TOKEN_OPEN_PAREN, ctx);
+        
+        NodeTermPrint *print_node = malloc(sizeof(NodeTermPrint));
+        print_node->fd = parse_expr(0, ctx);
+
+        expect_token(TOKEN_COMMA, ctx);
+
+        print_node->content = parse_expr(0, ctx);
+        
+        expect_token(TOKEN_CLOSE_PAREN, ctx);
+        
+        term_base->kind = NODE_TERM_PRINT;
+        term_base->as.print = print_node;
     }
     // else if (is_type_token(peek->type)) {
     //     // type cast: type(expr)
