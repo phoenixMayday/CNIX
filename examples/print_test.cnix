@@ -1,0 +1,11 @@
+// print(fd, content) calls the write syscall and returns bytes written.
+// fd 1 = stdout, fd 2 = stderr.
+
+// --- named char[] variable ---
+char[] greeting = "Hello, World!\n";
+_ = print(1, greeting);
+
+// --- inline array literal ---
+_ = print(1, {'O', 'K', '\n'});
+
+exit(0);

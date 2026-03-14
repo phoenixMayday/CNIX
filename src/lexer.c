@@ -50,7 +50,6 @@ typedef enum {
     TOKEN_PRINT,
     TOKEN_ALLOC,
     TOKEN_FREE,
-    TOKEN_PRINT
 } TokenType;
 
 // static int is_type_token(TokenType token_type) {

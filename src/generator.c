@@ -10,6 +10,11 @@ typedef enum {
 } MemWidth;
 
 typedef struct {
+    size_t stack_loc;
+    size_t length;
+} FatPtr;
+
+typedef struct {
     char *name;
     size_t stack_loc;
     MemWidth total_width;
@@ -46,6 +51,8 @@ typedef struct {
     size_t *scopes;
     int scope_count;
     int label_count;
+    FatPtr *fat_ptrs;
+    int fat_ptr_count;
 } CodegenCtx;
 
 MemWidth token_to_base_size(TokenType token_type) {
@@ -131,6 +138,20 @@ int get_var_index(const char *name, CodegenCtx *ctx) {
         }
     }
     return -1; // not found
+}
+
+// register fat pointer entry
+static void register_fat_ptr(CodegenCtx *ctx, size_t stack_loc, size_t length) {
+    ctx->fat_ptrs = realloc(ctx->fat_ptrs, sizeof(FatPtr) * (ctx->fat_ptr_count + 1));
+    ctx->fat_ptrs[ctx->fat_ptr_count++] = (FatPtr){ stack_loc, length };
+}
+
+// search fat pointer table for matching stack_loc
+static int lookup_fat_ptr(CodegenCtx *ctx, size_t stack_loc) {
+    for (int i = ctx->fat_ptr_count - 1; i >= 0; i--) {
+        if (ctx->fat_ptrs[i].stack_loc == stack_loc) return i;
+    }
+    return -1;
 }
 
 static void append(char **buf, const char *text) {
@@ -449,16 +470,25 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         // if array is used in a variable declaration, the assign statement will handle storing the elements instead
         int element_count = term->as.array_lit->element_count;
 
-        // push all the elements onto the stack
-        for (int i = 0; i < element_count; i++) {
+        size_t stack_before_array = ctx->stack_size;
+
+        // push in reverse order so element[0] ends up at the lowest address (rsp after all pushes).
+        // mirrors the stmt_assign array path.
+        for (int i = element_count - 1; i >= 0; i--) {
             gen_expr(term->as.array_lit->elements[i], ctx);
 
-            // `gen_expr` pushes qwords, but we want our default behaviour to store bytes (might be easier for strings)
+            // gen_expr pushes a qword; store just the low byte in-place.
             appendf(&ctx->output,
-                "    # adjust stack pointer to shrink array element to byte\n"
-                "    addq $3, %%rsp\n");
-            ctx->stack_size -= 3 * BYTE;
+                "    # store array element as byte\n"
+                "    popq %%rax\n"
+                "    sub $1, %%rsp\n"
+                "    movb %%al, (%%rsp)\n");
+            ctx->stack_size = ctx->stack_size - QWORD + BYTE;
         }
+
+        // register fat pointer so that print handler can look it up
+        size_t array_byte_length = ctx->stack_size - stack_before_array;
+        register_fat_ptr(ctx, ctx->stack_size, array_byte_length);
     }
     else if (term->kind == NODE_TERM_PRINT) {
         // print with write syscall
@@ -468,14 +498,92 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
             buf,    // pointer to data
             count,  // number of bytes to print
         )
-        returns bytes written in raxs
+        returns bytes written in rax
         */
 
-        // the content should basically be a fat pointer.
-        // should `print(1, myStr)` automatically get the length of myStr? or should it be something like `print(`1, fat(myStr))`? prob not
-        // variables will have there length remembered by the CodegenCtx, but what about in `print(`1, "hello")`? there should be a 
-        //   temporary fat pointer stack/storage in the CodegenCtx.
+        NodeTermPrint *print_node = term->as.print;
+        NodeExpr *content_expr = print_node->content;
 
+        // Determine whether content expression produces a pointer (address)
+        // or pushes raw bytes to the stack, and resolve the byte length.
+        int content_is_address = 0;
+        size_t content_length  = 0;
+
+        if (content_expr->kind == NODE_EXPR_TERM &&
+            content_expr->as.term->kind == NODE_TERM_IDENT) {
+            const char *vname = content_expr->as.term->as.ident->ident.value;
+            int vi = get_var_index(vname, ctx);
+            if (vi == -1) {
+                fprintf(stderr, "Undefined variable \"%s\" in print\n", vname);
+                exit(EXIT_FAILURE);
+            }
+            content_length     = ctx->vars[vi].total_width;
+            content_is_address = 1; // gen_expr for an array/pointer ident pushes the address
+        } else if (content_expr->kind == NODE_EXPR_TERM &&
+                   content_expr->as.term->kind == NODE_TERM_ARRAY_LIT) {
+            content_is_address = 0; // raw bytes go on the stack; fat_ptr gives the length
+        } else {
+            fprintf(stderr, "print: unsupported content expression "
+                            "(cannot determine byte length at compile time)\n");
+            exit(EXIT_FAILURE);
+        }
+
+        size_t stack_before_content = ctx->stack_size;
+        gen_expr(content_expr, ctx);
+
+        if (content_is_address) {
+            // gen_expr pushed address qword onto the stack
+            // stack layout: [...|address(8)] <- rsp
+            gen_expr(print_node->fd, ctx);
+            // stack layout: [...|address(8)|fd(8)] <- rsp
+
+            appendf(&ctx->output,
+                "    # print(fd, buf) - write syscall\n"
+                "    popq %%rdi\n"        // fd (1st arg)
+                "    popq %%rsi\n"        // buf (2nd arg)
+                "    movq $%zu, %%rdx\n"  // count (3rd arg)
+                "    movq $1, %%rax\n"    // sys_write
+                "    syscall\n"
+                "    pushq %%rax\n",      // bytes written (return value)
+                content_length);
+
+            // net stack change: +address +fd -fd -address +retval = +8
+            ctx->stack_size = stack_before_content + QWORD;
+        } else {
+            // gen_expr pushed the array bytes directly onto the stack
+            // fat_ptrs has entry registered by gen_term(NODE_TERM_ARRAY_LIT).
+            int fp_idx = lookup_fat_ptr(ctx, ctx->stack_size);
+            if (fp_idx != -1) {
+                content_length = ctx->fat_ptrs[fp_idx].length;
+            } else {
+                // fallback: infer from the stack delta
+                content_length = ctx->stack_size - stack_before_content;
+            }
+
+            // rsp points at the start of the raw data.  Save the address into
+            // rsi NOW, before gen_expr(fd) shifts rsp upward.
+            appendf(&ctx->output,
+                "    # print: raw data on stack, capture address\n"
+                "    leaq (%%rsp), %%rsi\n");
+
+            gen_expr(print_node->fd, ctx);
+            // stack layout: [...|raw_data(%zu bytes)|fd(8)] <- rsp
+
+            appendf(&ctx->output,
+                "    # print(fd, buf) - write syscall\n"
+                "    popq %%rdi\n"        // fd (1st arg, rsi already set)
+                "    movq $%zu, %%rdx\n"  // count (3rd arg)
+                "    movq $1, %%rax\n"    // sys_write
+                "    syscall\n"
+                "    # discard raw data; push return value\n"
+                "    addq $%zu, %%rsp\n"  // pop raw bytes
+                "    pushq %%rax\n",      // bytes written (return value)
+                content_length,
+                content_length);
+
+            // net: +content_length +fd -fd -content_length +retval = +8
+            ctx->stack_size = stack_before_content + QWORD;
+        }
     }
     else {
         fprintf(stderr, "Unknown term kind in code generation\n");
