@@ -8,4 +8,9 @@ _ = print(1, greeting);
 // --- inline array literal ---
 _ = print(1, {'O', 'K', '\n'});
 
+_ = print(1, "{'e'}{'v'}{'a'}{'\n'}");
+
+char[] str = "eva";
+_ = print(1, "Hello {str}!\n");
+
 exit(0);

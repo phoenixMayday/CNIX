@@ -475,9 +475,39 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
         // push in reverse order so element[0] ends up at the lowest address (rsp after all pushes).
         // mirrors the stmt_assign array path.
         for (int i = element_count - 1; i >= 0; i--) {
-            gen_expr(term->as.array_lit->elements[i], ctx);
+            NodeExpr *elem = term->as.array_lit->elements[i];
+
+            // if the element is a char[] variable, splice its bytes in directly
+            if (elem->kind == NODE_EXPR_TERM &&
+                elem->as.term->kind == NODE_TERM_IDENT) {
+                const char *var_name = elem->as.term->as.ident->ident.value;
+                int var_index = get_var_index(var_name, ctx);
+                if (var_index != -1 && is_array(&ctx->vars[var_index])) {
+                    Var *src = &ctx->vars[var_index];
+                    size_t offset = ctx->stack_size - src->stack_loc;
+                    size_t len = src->total_width;
+
+                    // save base address of src[0] before rsp moves
+                    appendf(&ctx->output,
+                        "    # splice char[] `%s` into string literal\n"
+                        "    leaq %zu(%%rsp), %%rsi\n",
+                        var_name, offset);
+
+                    // push bytes in reverse so src[0] ends up at the lowest address
+                    for (int j = (int)len - 1; j >= 0; j--) {
+                        appendf(&ctx->output,
+                            "    movb %d(%%rsi), %%al\n"
+                            "    sub $1, %%rsp\n"
+                            "    movb %%al, (%%rsp)\n",
+                            j);
+                        ctx->stack_size += BYTE;
+                    }
+                    continue;
+                }
+            }
 
             // gen_expr pushes a qword; store just the low byte in-place.
+            gen_expr(elem, ctx);
             appendf(&ctx->output,
                 "    # store array element as byte\n"
                 "    popq %%rax\n"
@@ -511,13 +541,13 @@ void gen_term(NodeTerm *term, CodegenCtx *ctx) {
 
         if (content_expr->kind == NODE_EXPR_TERM &&
             content_expr->as.term->kind == NODE_TERM_IDENT) {
-            const char *vname = content_expr->as.term->as.ident->ident.value;
-            int vi = get_var_index(vname, ctx);
-            if (vi == -1) {
-                fprintf(stderr, "Undefined variable \"%s\" in print\n", vname);
+            const char *var_name = content_expr->as.term->as.ident->ident.value;
+            int var_index = get_var_index(var_name, ctx);
+            if (var_index == -1) {
+                fprintf(stderr, "Undefined variable \"%s\" in print\n", var_name);
                 exit(EXIT_FAILURE);
             }
-            content_length     = ctx->vars[vi].total_width;
+            content_length     = ctx->vars[var_index].total_width;
             content_is_address = 1; // gen_expr for an array/pointer ident pushes the address
         } else if (content_expr->kind == NODE_EXPR_TERM &&
                    content_expr->as.term->kind == NODE_TERM_ARRAY_LIT) {
