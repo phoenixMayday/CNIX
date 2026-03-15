@@ -1,0 +1,5 @@
+byte myVar = 118;
+
+char[] str = "e{myVar}a";
+
+exit(str[0]);

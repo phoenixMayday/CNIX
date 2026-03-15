@@ -1,5 +1,6 @@
-char[] str = "eva";
+char[] str = "ev_";
 
-char c = str[2];
+byte a = 97;
+str[2] = a;
 
-exit(c);
+exit(str[2]);

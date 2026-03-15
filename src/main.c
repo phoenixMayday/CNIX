@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
     printf("\nTokens:\n");
 
     int token_count;
-    Token *tokens = tokenise(buffer, &token_count);
+    Token *tokens = lex_string(buffer, &token_count);
     for (int i = 0; i < token_count; i++) {
         printf("%s\n", 
             tokens[i].type == TOKEN_EXIT ? "EXIT" :
